@@ -25,8 +25,10 @@ import {
   Search, 
   Filter, 
   Map, 
-  Target 
+  Target,
+  AlertCircle // Added AlertCircle import
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Form validation schema
 const questSchema = z.object({
@@ -333,6 +335,7 @@ const QuestCard = ({ quest, onEdit, onDelete }: {
 
 // Main Admin Component
 const Admin = () => {
+  const { user } = useAuth();
   const { quests, loading, addQuest, updateQuest, deleteQuest } = useQuests();
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -341,6 +344,29 @@ const Admin = () => {
     statusFilter: "all",
     buildingFilter: "all",
   });
+
+  // If not an admin, show access denied
+  if (!user || !user.isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-destructive/50">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="rounded-full bg-destructive/10 p-3">
+                <AlertCircle className="h-10 w-10 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Access Denied</h3>
+                <p className="text-muted-foreground mt-2">
+                  Administrator privileges required to access this page.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Extract unique buildings for filter dropdown
   const uniqueBuildings = useMemo(() => {
