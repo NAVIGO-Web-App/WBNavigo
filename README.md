@@ -1,73 +1,102 @@
-# Welcome to your Lovable project
+# NAVIGO
+**Project Overview**
+- NAVIGO is a location-based game for university students that encourages exploration through quests, treasure hunts and rewards. The application consists of:
+  - **Frontend**:  Vite, TypeScript React.js + Tailwind CSS, shadcn-ui
+  -  **Backend**: Node.js + Express.js
+  -  **Database**: Firebase Firestore
+  -  **Authentication**: Firebase Auth
+  -  **External API**: Google Maps APi for location verification
 
-## Project info
+- We are using the Agile and SCRUM Methodology.
+    
+**Repository Structure**
+- The source codes are stored in the source folder and compiled there.
+- The main branch is used to store build files which are compiled to run static files.
+  - Our deployment to GitHub Pages and Azure is done from main branch.
+    
+- The other branches are created by each member for their commits and changes to the main branch. This is done to ensure a clean workflow for each member.
 
-**URL**: https://lovable.dev/projects/7614476b-aa7a-4500-8de4-b0d1884f872a
+**Git Methodology**
 
-## How can I edit this code?
+Git is used for version control, allowing the team to track changes, collaborate, and maintain a history of the project. The methodology includes:
 
-There are several ways of editing your application.
+ **Branching Strategy**
 
-**Use Lovable**
+* **Main Branch (`main`/`master`)**: Always stable and deployable.
+* **Feature Branches**: Created for each new feature or task.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/7614476b-aa7a-4500-8de4-b0d1884f872a) and start prompting.
+  * Naming convention: `contributor-name/feature-name`
+* **Bugfix Branches**: For fixing issues in the project.
 
-Changes made via Lovable will be committed automatically to this repo.
+  * Naming convention: `contributor-name/bugfix-name`
+* **Merge Strategy**: Feature or bugfix branches are merged into `main` after code review.
 
-**Use your preferred IDE**
+### **Commit Practices**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+* Commit frequently with small, meaningful changes.
+* Use clear messages that describe the change:
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+  
+  git commit -m "Add login functionality with Firebase Auth"
 
-Follow these steps:
+* Include references to task IDs or issue numbers when relevant.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### **Pull Requests / Code Review**
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+* Team members create a pull request (PR) before merging to `main`.
+* PRs are reviewed by at least one other team member to ensure code quality and consistency.
 
-# Step 3: Install the necessary dependencies.
-npm i
+### **Versioning & Releases**
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+* Tag releases when reaching milestones:
 
-**Edit a file directly in GitHub**
+  
+  git tag -a v1.0 -m "Initial working version"
+  
+* Helps track progress and rollback if needed.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### **Collaboration Workflow**
 
-**Use GitHub Codespaces**
+* All team members pull the latest changes before starting work:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+  
+  git pull origin main
+  
+* Push changes to the feature branch, then create a PR for merging.
 
-## What technologies are used for this project?
 
-This project is built with:
+**Running the project**
+- Install Node.js & npm
+- Verify with:
+  node -v
+  npm -v
+- Navigate to Project & Install Dependencies
+  cd your-project
+  npm install
+- Set Up TailwindCSS
+  npm install -D tailwindcss postcss autoprefixer
+  npx tailwindcss init -p
+- In your CSS file:
+  @tailwind base;
+  @tailwind components;
+  @tailwind utilities;
+- Run Tailwind build:
+  npm run dev
+- Run server:
+  node server.js
+  or
+  npx nodemon server.js
+  
+**Testing Strategy**
+- Unit Testing : Jest
+- Integration Testing : Cypress
+- API Testing : Postman
+  
+**Contributors**
+- Katleho Sefuba
+- Kgaogelo Nkwana
+- Yanga Peter
+- Yonwaba Vunda
+- Yamkela Vutula
+- Kuhle Bikitsha
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/7614476b-aa7a-4500-8de4-b0d1884f872a) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
