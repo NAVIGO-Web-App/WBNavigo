@@ -40,7 +40,7 @@ const HowItWorksSection = () => {
             How It Works
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Get started with Campus Quest in three simple steps and begin your
+            Get started with NAVIGO in three simple steps and begin your
             campus adventure today
           </p>
         </div>
@@ -85,7 +85,7 @@ const HowItWorksSection = () => {
 
         {/* CTA */}
         <div className="text-center">
-          <Link to="/map">
+          <Link to="/signup">
             <Button variant="hero" size="lg" className="text-lg px-8 py-6">
               Start Your Quest Now
               <ArrowRight className="w-5 h-5 ml-2" />

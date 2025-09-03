@@ -126,7 +126,7 @@ const Leaderboard = () => {
         {/* Page Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Campus Quest Leaderboard
+            NAVIGO Leaderboard
           </h1>
           <p className="text-muted-foreground">
             See how you rank against other campus explorers

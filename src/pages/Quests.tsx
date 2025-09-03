@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MapPin, Star, Clock, Award, Play, CheckCircle, Timer } from "lucide-react";
 import Header from "@/components/Header";
+import { useNavigate } from "react-router-dom";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/firebase"; // Make sure your Firebase is initialized here
 
 interface Quest {
   id: string;
@@ -17,82 +20,38 @@ interface Quest {
   status: "Available" | "In Progress" | "Completed";
   estimatedTime: string;
   requirements?: string[];
+  position: { lat: number; lng: number };
 }
 
 const Quests = () => {
   const [selectedTab, setSelectedTab] = useState("all");
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const navigate = useNavigate();
 
-  const quests: Quest[] = [
-    {
-      id: "1",
-      title: "Library Explorer",
-      description: "Navigate through the ancient literature section and find the hidden book that contains a secret message about campus history.",
-      location: "Main Library - Floor 3",
-      difficulty: "Easy",
-      points: 100,
-      type: "Location",
-      status: "Available",
-      estimatedTime: "15 min",
-      requirements: ["Library access card"],
-    },
-    {
-      id: "2",
-      title: "Science Lab Mystery",
-      description: "Solve the chemistry puzzle in Lab 204 by identifying the correct chemical compounds and their reactions.",
-      location: "Science Building - Lab 204",
-      difficulty: "Hard",
-      points: 300,
-      type: "Challenge",
-      status: "Available",
-      estimatedTime: "45 min",
-      requirements: ["Science building access", "Basic chemistry knowledge"],
-    },
-    {
-      id: "3",
-      title: "Cafeteria Treasure",
-      description: "Discover the secret menu item by following hidden clues throughout the cafeteria and kitchen areas.",
-      location: "Student Cafeteria",
-      difficulty: "Medium",
-      points: 200,
-      type: "Treasure",
-      status: "In Progress",
-      estimatedTime: "30 min",
-    },
-    {
-      id: "4",
-      title: "Sports Hall Challenge",
-      description: "Complete the athletic achievement course and set a new personal record in three different sports activities.",
-      location: "Sports Complex - Main Hall",
-      difficulty: "Medium",
-      points: 250,
-      type: "Challenge",
-      status: "Available",
-      estimatedTime: "60 min",
-      requirements: ["Athletic wear", "Sports equipment access"],
-    },
-    {
-      id: "5",
-      title: "Art Gallery Quest",
-      description: "Identify the mysterious painting's hidden message by studying the artistic elements and historical context.",
-      location: "Art Building - Gallery",
-      difficulty: "Easy",
-      points: 150,
-      type: "Location",
-      status: "Completed",
-      estimatedTime: "25 min",
-    },
-    {
-      id: "6",
-      title: "Campus History Hunt",
-      description: "Uncover the founding stories of the university by visiting historical markers around campus.",
-      location: "Multiple Campus Locations",
-      difficulty: "Medium",
-      points: 180,
-      type: "Treasure",
-      status: "Available",
-      estimatedTime: "40 min",
-    },
-  ];
+  useEffect(() => {
+    const fetchQuests = async () => {
+      const snapshot = await getDocs(collection(db, "quests"));
+      const data: Quest[] = snapshot.docs.map((doc) => {
+        const d = doc.data();
+        const [lat, lng] = d.building.split(",").map((x: string) => parseFloat(x));
+        return {
+          id: doc.id,
+          title: d.title,
+          description: d.description,
+          location: d.title,
+          difficulty: d.difficulty || "Medium",
+          points: d.rewardPoints,
+          type: d.type || "Location",
+          status: d.status === "active" ? "Available" : "Completed",
+          estimatedTime: d.estimatedTime || "30 min",
+          requirements: d.requirements || [],
+          position: { lat, lng },
+        };
+      });
+      setQuests(data);
+    };
+    fetchQuests();
+  }, []);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -121,7 +80,7 @@ const Quests = () => {
     }
   };
 
-  const filteredQuests = quests.filter(quest => {
+  const filteredQuests = quests.filter((quest) => {
     if (selectedTab === "all") return true;
     if (selectedTab === "available") return quest.status === "Available";
     if (selectedTab === "in-progress") return quest.status === "In Progress";
@@ -133,7 +92,6 @@ const Quests = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 py-8">
-        {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Campus Quests</h1>
           <p className="text-muted-foreground">
@@ -141,7 +99,6 @@ const Quests = () => {
           </p>
         </div>
 
-        {/* Quest Tabs */}
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="mb-8">
           <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
             <TabsTrigger value="all">All Quests</TabsTrigger>
@@ -155,7 +112,7 @@ const Quests = () => {
               {filteredQuests.map((quest) => {
                 const StatusIcon = getStatusIcon(quest.status);
                 const TypeIcon = getTypeIcon(quest.type);
-                
+
                 return (
                   <Card
                     key={quest.id}
@@ -167,24 +124,15 @@ const Quests = () => {
                           <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
                             <TypeIcon className="w-4 h-4 text-primary" />
                           </div>
-                          <Badge variant="outline" className="text-xs">
-                            {quest.type}
-                          </Badge>
+                          <Badge variant="outline" className="text-xs">{quest.type}</Badge>
                         </div>
-                        <Badge className={getDifficultyColor(quest.difficulty)}>
-                          {quest.difficulty}
-                        </Badge>
+                        <Badge className={getDifficultyColor(quest.difficulty)}>{quest.difficulty}</Badge>
                       </div>
-                      <CardTitle className="text-lg font-semibold">
-                        {quest.title}
-                      </CardTitle>
-                      <CardDescription className="text-sm">
-                        {quest.description}
-                      </CardDescription>
+                      <CardTitle className="text-lg font-semibold">{quest.title}</CardTitle>
+                      <CardDescription className="text-sm">{quest.description}</CardDescription>
                     </CardHeader>
 
                     <CardContent className="space-y-4">
-                      {/* Quest Details */}
                       <div className="space-y-2 text-sm">
                         <div className="flex items-center space-x-2 text-muted-foreground">
                           <MapPin className="w-4 h-4" />
@@ -200,32 +148,26 @@ const Quests = () => {
                         </div>
                       </div>
 
-                      {/* Requirements */}
-                      {quest.requirements && (
+                      {quest.requirements?.length > 0 && (
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground">Requirements:</p>
                           <div className="flex flex-wrap gap-1">
-                            {quest.requirements.map((req, index) => (
-                              <Badge key={index} variant="secondary" className="text-xs">
-                                {req}
-                              </Badge>
+                            {quest.requirements.map((req, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">{req}</Badge>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Action Button */}
                       <div className="pt-2">
-                        {quest.status === "Available" && (
-                          <Button variant="default" className="w-full group-hover:shadow-glow transition-all duration-300">
-                            <Play className="w-4 h-4 mr-2" />
-                            Start Quest
-                          </Button>
-                        )}
-                        {quest.status === "In Progress" && (
-                          <Button variant="secondary" className="w-full">
-                            <Timer className="w-4 h-4 mr-2" />
-                            Continue Quest
+                        {(quest.status === "Available" || quest.status === "In Progress") && (
+                          <Button
+                            variant={quest.status === "Available" ? "default" : "secondary"}
+                            className="w-full"
+                            onClick={() => navigate("/map", { state: { quest } })}
+                          >
+                            {quest.status === "Available" ? <Play className="w-4 h-4 mr-2" /> : <Timer className="w-4 h-4 mr-2" />}
+                            {quest.status === "Available" ? "Start Quest" : "Continue Quest"}
                           </Button>
                         )}
                         {quest.status === "Completed" && (
@@ -240,22 +182,10 @@ const Quests = () => {
                 );
               })}
             </div>
-
-            {/* Empty State */}
-            {filteredQuests.length === 0 && (
-              <Card className="bg-gradient-card shadow-card-custom">
-                <CardContent className="text-center py-12">
-                  <Award className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">
-                    No quests found in this category
-                  </p>
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
         </Tabs>
 
-        {/* Stats Summary */}
+        {/* Quick summary */}
         <Card className="bg-gradient-card shadow-card-custom">
           <CardHeader>
             <CardTitle>Quest Summary</CardTitle>
@@ -263,27 +193,19 @@ const Quests = () => {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-2xl font-bold text-primary">
-                  {quests.filter(q => q.status === "Completed").length}
-                </div>
+                <div className="text-2xl font-bold text-primary">{quests.filter(q => q.status === "Completed").length}</div>
                 <div className="text-sm text-muted-foreground">Completed</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-secondary">
-                  {quests.filter(q => q.status === "In Progress").length}
-                </div>
+                <div className="text-2xl font-bold text-secondary">{quests.filter(q => q.status === "In Progress").length}</div>
                 <div className="text-sm text-muted-foreground">In Progress</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-warning">
-                  {quests.filter(q => q.status === "Available").length}
-                </div>
+                <div className="text-2xl font-bold text-warning">{quests.filter(q => q.status === "Available").length}</div>
                 <div className="text-sm text-muted-foreground">Available</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-success">
-                  {quests.reduce((sum, q) => q.status === "Completed" ? sum + q.points : sum, 0)}
-                </div>
+                <div className="text-2xl font-bold text-success">{quests.reduce((sum, q) => q.status === "Completed" ? sum + q.points : sum, 0)}</div>
                 <div className="text-sm text-muted-foreground">Total Points</div>
               </div>
             </div>
