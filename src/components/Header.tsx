@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Menu, X, MapPin, Trophy, User, List, Shield, LogOut } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { ThemeToggle } from "@/components/ThemeToggle"; // Add this import
+import { useTheme } from "@/contexts/ThemeContext"; // Add this import
 
 const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme } = useTheme(); // Add theme hook
 
   // Base navigation items (always shown to logged-in users)
   const baseNavigation = [
@@ -37,7 +40,7 @@ const Header = () => {
   };
 
   return (
-    <header className="bg-card border-b border-border shadow-card-custom">
+    <header className="bg-card dark:bg-gray-900 border-b border-border dark:border-gray-700 shadow-card-custom">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -68,9 +71,12 @@ const Header = () => {
                 );
               })}
               
+              {/* Theme Toggle - Add this */}
+              <ThemeToggle />
+              
               {/* User info and logout button */}
               <div className="flex items-center ml-4 space-x-2">
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground dark:text-gray-300">
                   Hello, {user.displayName || user.email}
                   {user.isAdmin && (
                     <span className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
@@ -94,6 +100,7 @@ const Header = () => {
           {/* Show login button when not logged in */}
           {!user && (
             <div className="hidden md:flex items-center space-x-2">
+              <ThemeToggle /> {/* Add theme toggle for non-logged in users */}
               <Link to="/signup">
                 <Button variant="default" size="sm">
                   Login / Sign Up
@@ -103,17 +110,20 @@ const Header = () => {
           )}
 
           {/* Mobile menu button */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-md text-foreground hover:bg-accent"
-          >
-            {isOpen ? <X className="w-6 w-6" /> : <Menu className="w-6 w-6" />}
-          </button>
+          <div className="md:hidden flex items-center space-x-2">
+            <ThemeToggle /> {/* Add theme toggle in mobile header */}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2 rounded-md text-foreground hover:bg-accent"
+            >
+              {isOpen ? <X className="w-6 w-6" /> : <Menu className="w-6 w-6" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="md:hidden py-4 border-t border-border">
+          <div className="md:hidden py-4 border-t border-border dark:border-gray-700">
             <nav className="flex flex-col space-y-2">
               {/* Show navigation items only when logged in */}
               {user && (
@@ -151,7 +161,7 @@ const Header = () => {
                   </Button>
                   
                   {/* Mobile user info */}
-                  <div className="px-4 py-2 text-sm text-muted-foreground">
+                  <div className="px-4 py-2 text-sm text-muted-foreground dark:text-gray-300">
                     Logged in as: {user.displayName || user.email}
                     {user.isAdmin && (
                       <span className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">

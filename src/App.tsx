@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext"; // Updated import
 import Index from "./pages/Index";
 import SignUpPage from "./pages/SignUp";
 import CampusMap from "./pages/CampusMap";
@@ -18,63 +19,104 @@ import AdminProtectedRoute from "@/components/AdminProtectedRoute";
 
 const queryClient = new QueryClient();
 
+// Simple wrapper for dark mode styling
+function DarkModeWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200">
+      {children}
+    </div>
+  );
+}
+
 const App = () => (
-  <AuthProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/signup" element={<SignUpPage />} />
-            <Route 
-              path="/map" 
-              element={
-                <ProtectedRoute>
-                  <CampusMap />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/quests" 
-              element={
-                <ProtectedRoute>
-                  <Quests />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/leaderboard" 
-              element={
-                <ProtectedRoute>
-                  <Leaderboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/profile" 
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin" 
-              element={
-                <AdminProtectedRoute>
-                  <Admin />
-                </AdminProtectedRoute>
-              } 
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </AuthProvider>
+  <ThemeProvider>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route 
+                path="/" 
+                element={
+                  <DarkModeWrapper>
+                    <Index />
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/signup" 
+                element={
+                  <DarkModeWrapper>
+                    <SignUpPage />
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/map" 
+                element={
+                  <DarkModeWrapper>
+                    <ProtectedRoute>
+                      <CampusMap />
+                    </ProtectedRoute>
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/quests" 
+                element={
+                  <DarkModeWrapper>
+                    <ProtectedRoute>
+                      <Quests />
+                    </ProtectedRoute>
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/leaderboard" 
+                element={
+                  <DarkModeWrapper>
+                    <ProtectedRoute>
+                      <Leaderboard />
+                    </ProtectedRoute>
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/profile" 
+                element={
+                  <DarkModeWrapper>
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="/admin" 
+                element={
+                  <DarkModeWrapper>
+                    <AdminProtectedRoute>
+                      <Admin />
+                    </AdminProtectedRoute>
+                  </DarkModeWrapper>
+                } 
+              />
+              <Route 
+                path="*" 
+                element={
+                  <DarkModeWrapper>
+                    <NotFound />
+                  </DarkModeWrapper>
+                } 
+              />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AuthProvider>
+  </ThemeProvider>
 );
 
 export default App;

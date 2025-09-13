@@ -29,6 +29,7 @@ import {
   AlertCircle // Added AlertCircle import
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import Header from "@/components/Header";
 
 // Form validation schema
 const questSchema = z.object({
@@ -456,9 +457,10 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
+        <Header />
         <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg">
           <CardHeader className="text-center py-8">
             <CardTitle className="flex items-center justify-center gap-3 text-3xl md:text-4xl font-bold">

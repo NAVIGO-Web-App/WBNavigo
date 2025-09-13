@@ -204,7 +204,7 @@ function SignUpPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
       {/* Header */}
       <header className="bg-card border-b border-border shadow-card-custom">
         <div className="container mx-auto px-4">

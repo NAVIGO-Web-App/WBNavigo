@@ -7,7 +7,8 @@ import { MapPin, Star, Clock, Award, Play, CheckCircle, Timer } from "lucide-rea
 import Header from "@/components/Header";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/firebase"; // Make sure your Firebase is initialized here
+import { db } from "@/firebase";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface Quest {
   id: string;
@@ -27,6 +28,7 @@ const Quests = () => {
   const [selectedTab, setSelectedTab] = useState("all");
   const [quests, setQuests] = useState<Quest[]>([]);
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   useEffect(() => {
     const fetchQuests = async () => {
@@ -89,22 +91,30 @@ const Quests = () => {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
       <Header />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Campus Quests</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-foreground dark:text-white mb-2">Campus Quests</h1>
+          <p className="text-muted-foreground dark:text-gray-300">
             Explore exciting challenges and discover hidden treasures around campus
           </p>
         </div>
 
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="mb-8">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
-            <TabsTrigger value="all">All Quests</TabsTrigger>
-            <TabsTrigger value="available">Available</TabsTrigger>
-            <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4 bg-muted dark:bg-gray-800">
+            <TabsTrigger value="all" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
+              All Quests
+            </TabsTrigger>
+            <TabsTrigger value="available" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
+              Available
+            </TabsTrigger>
+            <TabsTrigger value="in-progress" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
+              In Progress
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
+              Completed
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={selectedTab} className="mt-6">
@@ -116,33 +126,33 @@ const Quests = () => {
                 return (
                   <Card
                     key={quest.id}
-                    className="group hover:shadow-quest transition-all duration-300 transform hover:scale-[1.02] bg-gradient-card"
+                    className="group hover:shadow-quest transition-all duration-300 transform hover:scale-[1.02] bg-card dark:bg-gray-800 dark:border-gray-700"
                   >
                     <CardHeader className="pb-4">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <div className="w-8 h-8 bg-primary/10 dark:bg-primary/20 rounded-lg flex items-center justify-center">
                             <TypeIcon className="w-4 h-4 text-primary" />
                           </div>
-                          <Badge variant="outline" className="text-xs">{quest.type}</Badge>
+                          <Badge variant="outline" className="text-xs dark:border-gray-600 dark:text-gray-300">{quest.type}</Badge>
                         </div>
                         <Badge className={getDifficultyColor(quest.difficulty)}>{quest.difficulty}</Badge>
                       </div>
-                      <CardTitle className="text-lg font-semibold">{quest.title}</CardTitle>
-                      <CardDescription className="text-sm">{quest.description}</CardDescription>
+                      <CardTitle className="text-lg font-semibold dark:text-white">{quest.title}</CardTitle>
+                      <CardDescription className="text-sm dark:text-gray-300">{quest.description}</CardDescription>
                     </CardHeader>
 
                     <CardContent className="space-y-4">
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center space-x-2 text-muted-foreground">
+                        <div className="flex items-center space-x-2 text-muted-foreground dark:text-gray-400">
                           <MapPin className="w-4 h-4" />
                           <span>{quest.location}</span>
                         </div>
-                        <div className="flex items-center space-x-2 text-muted-foreground">
+                        <div className="flex items-center space-x-2 text-muted-foreground dark:text-gray-400">
                           <Clock className="w-4 h-4" />
                           <span>{quest.estimatedTime}</span>
                         </div>
-                        <div className="flex items-center space-x-2 text-warning">
+                        <div className="flex items-center space-x-2 text-warning dark:text-yellow-400">
                           <Star className="w-4 h-4" />
                           <span className="font-medium">{quest.points} points</span>
                         </div>
@@ -150,10 +160,12 @@ const Quests = () => {
 
                       {quest.requirements?.length > 0 && (
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Requirements:</p>
+                          <p className="text-xs font-medium text-muted-foreground dark:text-gray-400">Requirements:</p>
                           <div className="flex flex-wrap gap-1">
                             {quest.requirements.map((req, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-xs">{req}</Badge>
+                              <Badge key={idx} variant="secondary" className="text-xs dark:bg-gray-600 dark:text-gray-300">
+                                {req}
+                              </Badge>
                             ))}
                           </div>
                         </div>
@@ -186,27 +198,27 @@ const Quests = () => {
         </Tabs>
 
         {/* Quick summary */}
-        <Card className="bg-gradient-card shadow-card-custom">
+        <Card className="bg-card dark:bg-gray-800 dark:border-gray-700 shadow-card-custom">
           <CardHeader>
-            <CardTitle>Quest Summary</CardTitle>
+            <CardTitle className="dark:text-white">Quest Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-2xl font-bold text-primary">{quests.filter(q => q.status === "Completed").length}</div>
-                <div className="text-sm text-muted-foreground">Completed</div>
+                <div className="text-2xl font-bold text-primary dark:text-blue-400">{quests.filter(q => q.status === "Completed").length}</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-400">Completed</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-secondary">{quests.filter(q => q.status === "In Progress").length}</div>
-                <div className="text-sm text-muted-foreground">In Progress</div>
+                <div className="text-2xl font-bold text-secondary dark:text-purple-400">{quests.filter(q => q.status === "In Progress").length}</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-400">In Progress</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-warning">{quests.filter(q => q.status === "Available").length}</div>
-                <div className="text-sm text-muted-foreground">Available</div>
+                <div className="text-2xl font-bold text-warning dark:text-yellow-400">{quests.filter(q => q.status === "Available").length}</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-400">Available</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-success">{quests.reduce((sum, q) => q.status === "Completed" ? sum + q.points : sum, 0)}</div>
-                <div className="text-sm text-muted-foreground">Total Points</div>
+                <div className="text-2xl font-bold text-success dark:text-green-400">{quests.reduce((sum, q) => q.status === "Completed" ? sum + q.points : sum, 0)}</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-400">Total Points</div>
               </div>
             </div>
           </CardContent>
