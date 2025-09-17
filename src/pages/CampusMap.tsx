@@ -1,17 +1,20 @@
+// Only these changes are needed - the dark: classes are CONDITIONAL
 import { useState, useEffect } from "react";
 import { GoogleMap, Marker, useJsApiLoader, DirectionsRenderer } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Star, Clock } from "lucide-react";
-import Header from "@/components/Header";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/firebase"; // Make sure Firebase is initialized
+import { db } from "@/firebase";
+import { useTheme } from "@/contexts/ThemeContext"; // Add this import
+import { ThemeToggle } from "@/components/ThemeToggle"; // Add this import
+import Header from "@/components/Header";
 
 interface QuestMarker {
   id: string;
   title: string;
   description: string;
-  location: string; // Human-readable location (quest title)
+  location: string;
   difficulty: "Easy" | "Medium" | "Hard";
   points: number;
   type: "Location" | "Treasure" | "Challenge";
@@ -22,7 +25,6 @@ interface QuestMarker {
 const containerStyle = { width: "100%", height: "500px", borderRadius: "0.75rem" };
 const center = { lat: -26.1915, lng: 28.0309 };
 
-// Function to parse coordinates like "26.1865° S, 28.0336° E" to decimal lat/lng
 const parseCoordinates = (coord: string) => {
   const [latStr, lngStr] = coord.split(",");
 
@@ -45,6 +47,7 @@ const CampusMap = () => {
   const [selectedQuest, setSelectedQuest] = useState<QuestMarker | null>(null);
   const [userPosition, setUserPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const { theme } = useTheme(); // Add theme hook
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -63,7 +66,7 @@ const CampusMap = () => {
           id: doc.id,
           title: d.title,
           description: d.description,
-          location: d.title, // Show quest title as readable location
+          location: d.title,
           difficulty: d.difficulty || "Medium",
           points: d.rewardPoints,
           type: d.type || "Location",
@@ -114,17 +117,18 @@ const CampusMap = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
+      {/* Header with theme toggle */}
       <Header />
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Map */}
           <div className="lg:col-span-2">
-            <Card className="bg-gradient-card shadow-card-custom">
+            <Card className="bg-card dark:bg-gray-800 shadow-card-custom dark:border-gray-700">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <MapPin className="w-6 h-6 text-primary" />
-                  <span>Campus Quest Map</span>
+                  <span>NAVIGO Map</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -152,7 +156,7 @@ const CampusMap = () => {
           {/* Quest Details */}
           <div className="space-y-6">
             {selectedQuest ? (
-              <Card className="bg-gradient-card shadow-quest">
+              <Card className="bg-card dark:bg-gray-800 shadow-quest dark:border-gray-700">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{selectedQuest.title}</CardTitle>
@@ -162,7 +166,7 @@ const CampusMap = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-muted-foreground">{selectedQuest.description}</p>
+                  <p className="text-muted-foreground dark:text-gray-300">{selectedQuest.description}</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center space-x-2">
                       <MapPin className="w-4 h-4 text-primary" />
@@ -180,10 +184,10 @@ const CampusMap = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="bg-gradient-card shadow-card-custom">
+              <Card className="bg-card dark:bg-gray-800 shadow-card-custom dark:border-gray-700">
                 <CardContent className="text-center py-12">
                   <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Click on a quest marker to view details</p>
+                  <p className="text-muted-foreground dark:text-gray-300">Click on a quest marker to view details</p>
                 </CardContent>
               </Card>
             )}

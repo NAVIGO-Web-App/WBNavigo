@@ -2,6 +2,7 @@ import React, { useState, useEffect, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { auth, db } from "../firebase";
+import Header from "@/components/Header";
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -82,7 +83,7 @@ function SignUpPage() {
       });
       navigate("/map");
     } catch (error: any) {
-      toast.error(error.message, {
+      toast.error("An error occured while signing up " + error.message, {
         position: "top-center",
       });
     } finally {
@@ -109,11 +110,11 @@ function SignUpPage() {
       });
       
       toast.success("User logged in Successfully", {
-        position: "top-center",
+      position: "top-center",
       });
       navigate("/map");
     } catch (error: any) {
-      toast.error(error.message, {
+      toast.error("incorrect password or email " + error.message, {
         position: "top-center",
       });
     } finally {
@@ -206,7 +207,8 @@ function SignUpPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-card border-b border-border shadow-card-custom">
+      <Header />
+      {/* <header className="bg-card border-b border-border shadow-card-custom">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-2">
@@ -217,7 +219,7 @@ function SignUpPage() {
             </div>
           </div>
         </div>
-      </header>
+      </header> */}
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
