@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { GoogleMap, Marker, useJsApiLoader, DirectionsRenderer } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import QuestTracker from "@/components/QuestTracker";
 import { MapPin, Star, Clock } from "lucide-react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/firebase";
@@ -51,7 +52,7 @@ const CampusMap = () => {
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
-    googleMapsApiKey: "AIzaSyDGZlh6l1MFfoGpOh5ip1OxRjCiBd95_3Y",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY!,
   });
 
   // Fetch quests from Firebase
@@ -181,6 +182,10 @@ const CampusMap = () => {
                       <span>Type: {selectedQuest.type}</span>
                     </div>
                   </div>
+                  <QuestTracker
+                  questLocation={selectedQuest.position}
+                  questId={selectedQuest.id}
+                />
                 </CardContent>
               </Card>
             ) : (
