@@ -2,14 +2,16 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBqQdK5XJ1L_APvIM8IbHhucafjBX3TLPU",
-  authDomain: "navigo-6ef6c.firebaseapp.com",
-  projectId: "navigo-6ef6c",
-  storageBucket: "navigo-6ef6c.firebasestorage.app",
-  messagingSenderId: "58284097478",
-  appId: "1:58284097478:web:5ef3fa6708ca2e95f9bcc7",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
 
 const app = initializeApp(firebaseConfig);
 
