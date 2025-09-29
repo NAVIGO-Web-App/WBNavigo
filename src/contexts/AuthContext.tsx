@@ -1,7 +1,8 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface User {
   uid: string;
@@ -36,32 +37,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuthState = async () => {
-      try {
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) {
-          const userData = JSON.parse(savedUser);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        // User is signed in
+        try {
+          // Fetch user data from Firestore
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          let isAdmin = false;
+          let displayName = firebaseUser.displayName;
           
-          // Fetch the latest user data from Firestore to check admin status
-          const userDoc = await getDoc(doc(db, "users", userData.uid));
           if (userDoc.exists()) {
             const userDataFromDb = userDoc.data();
-            setUser({
-              ...userData,
-              isAdmin: userDataFromDb.isAdmin || false
-            });
-          } else {
-            setUser(userData);
+            isAdmin = userDataFromDb.isAdmin || false;
+            displayName = userDataFromDb.name || displayName;
           }
+          
+          const userData: User = {
+            uid: firebaseUser.uid,
+            displayName: displayName,
+            email: firebaseUser.email,
+            isAdmin: isAdmin
+          };
+          
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setUser(null);
+          localStorage.removeItem('user');
         }
-      } catch (error) {
-        console.error("Error checking auth state:", error);
-      } finally {
-        setIsLoading(false);
+      } else {
+        // User is signed out
+        setUser(null);
+        localStorage.removeItem('user');
       }
-    };
+      setIsLoading(false);
+    });
 
-    checkAuthState();
+    return unsubscribe;
   }, []);
 
   const login = async (userData: { uid: string; displayName: string | null; email: string | null }) => {
@@ -84,12 +97,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(completeUserData));
     } catch (error) {
       console.error("Error during login:", error);
+      throw error; // Re-throw to handle in the component
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      await auth.signOut();
+      setUser(null);
+      localStorage.removeItem('user');
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
   };
 
   const value = {

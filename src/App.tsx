@@ -8,7 +8,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { ThemeProvider } from "@/contexts/ThemeContext"; // Updated import
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { QuestProvider } from "@/contexts/QuestContext"; // ADD THIS IMPORT
 import Index from "./pages/Index";
 import SignUpPage from "./pages/SignUp";
 import CampusMap from "./pages/CampusMap";
@@ -17,10 +18,13 @@ import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import QuestDetail from "./pages/QuestDetail"; // ADD THIS IMPORT
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminProtectedRoute from "@/components/AdminProtectedRoute";
+import { useAbandonmentNotification } from '@/hooks/useAbandonmentNotification';
 
 const queryClient = new QueryClient();
+useAbandonmentNotification();
 
 // Simple wrapper for dark mode styling
 function DarkModeWrapper({ children }: { children: React.ReactNode }) {
@@ -34,102 +38,113 @@ function DarkModeWrapper({ children }: { children: React.ReactNode }) {
 const App = () => (
   <ThemeProvider>
     <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          
-        <ToastContainer
-          position="top-center"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route 
-                path="/" 
-                element={
-                  <DarkModeWrapper>
-                    <Index />
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/signup" 
-                element={
-                  <DarkModeWrapper>
-                    <SignUpPage />
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/map" 
-                element={
-                  <DarkModeWrapper>
-                    <ProtectedRoute>
-                      <CampusMap />
-                    </ProtectedRoute>
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/quests" 
-                element={
-                  <DarkModeWrapper>
-                    <ProtectedRoute>
-                      <Quests />
-                    </ProtectedRoute>
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/leaderboard" 
-                element={
-                  <DarkModeWrapper>
-                    <ProtectedRoute>
-                      <Leaderboard />
-                    </ProtectedRoute>
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/profile" 
-                element={
-                  <DarkModeWrapper>
-                    <ProtectedRoute>
-                      <Profile />
-                    </ProtectedRoute>
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="/admin" 
-                element={
-                  <DarkModeWrapper>
-                    <AdminProtectedRoute>
-                      <Admin />
-                    </AdminProtectedRoute>
-                  </DarkModeWrapper>
-                } 
-              />
-              <Route 
-                path="*" 
-                element={
-                  <DarkModeWrapper>
-                    <NotFound />
-                  </DarkModeWrapper>
-                } 
-              />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </QueryClientProvider>
+      <QuestProvider> {/* ADD THIS PROVIDER */}
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ToastContainer
+              position="top-center"
+              autoClose={3000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="light"
+            />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route 
+                  path="/" 
+                  element={
+                    <DarkModeWrapper>
+                      <Index />
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/signup" 
+                  element={
+                    <DarkModeWrapper>
+                      <SignUpPage />
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/map" 
+                  element={
+                    <DarkModeWrapper>
+                      <ProtectedRoute>
+                        <CampusMap />
+                      </ProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/quests" 
+                  element={
+                    <DarkModeWrapper>
+                      <ProtectedRoute>
+                        <Quests />
+                      </ProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/quest/:questId" // ADD THIS ROUTE
+                  element={
+                    <DarkModeWrapper>
+                      <ProtectedRoute>
+                        <QuestDetail />
+                      </ProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/leaderboard" 
+                  element={
+                    <DarkModeWrapper>
+                      <ProtectedRoute>
+                        <Leaderboard />
+                      </ProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/profile" 
+                  element={
+                    <DarkModeWrapper>
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="/admin" 
+                  element={
+                    <DarkModeWrapper>
+                      <AdminProtectedRoute>
+                        <Admin />
+                      </AdminProtectedRoute>
+                    </DarkModeWrapper>
+                  } 
+                />
+                <Route 
+                  path="*" 
+                  element={
+                    <DarkModeWrapper>
+                      <NotFound />
+                    </DarkModeWrapper>
+                  } 
+                />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </QuestProvider>
     </AuthProvider>
   </ThemeProvider>
 );
