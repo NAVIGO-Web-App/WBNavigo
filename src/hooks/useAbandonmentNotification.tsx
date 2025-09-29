@@ -1,31 +1,33 @@
+// src/hooks/useAbandonmentNotification.tsx
 import { useEffect } from 'react';
 import { useQuest } from '@/contexts/QuestContext';
-import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 export const useAbandonmentNotification = () => {
-  const { activeQuest, checkAbandonment, quests, setActiveQuest } = useQuest();
-  const navigate = useNavigate();
+  // Use try-catch to handle the case when context is not available yet
+  let questContext;
+  try {
+    questContext = useQuest();
+  } catch (error) {
+    // Context not available yet, return early
+    return;
+  }
+
+  const { activeQuest, checkAbandonment, setActiveQuest } = questContext;
 
   useEffect(() => {
+    if (!activeQuest) return;
+
     const interval = setInterval(() => {
-      if (checkAbandonment() && activeQuest) {
-        const quest = quests.find(q => q.id === activeQuest.questId);
-        if (quest) {
-          const userAction = confirm(
-            `Still working on "${quest.title}"? \n\nClick OK to continue now, or Cancel to save for later.`
-          );
-          
-          if (userAction) {
-            navigate(`/quest/${quest.id}`);
-          } else {
-            // User chose to save for later - we can implement pausing logic here
-            // For now, we'll just update the last activity to reset the timer
-            console.log(`Quest ${quest.title} saved for later`);
-          }
-        }
+      if (checkAbandonment()) {
+        toast.warning('Quest abandoned due to inactivity!', {
+          position: "top-center",
+          autoClose: 5000,
+        });
+        setActiveQuest(null);
       }
     }, 60000); // Check every minute
 
     return () => clearInterval(interval);
-  }, [activeQuest, checkAbandonment, quests, navigate, setActiveQuest]);
+  }, [activeQuest, checkAbandonment, setActiveQuest]);
 };

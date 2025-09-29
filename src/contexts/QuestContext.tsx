@@ -204,75 +204,95 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const refreshQuests = async () => {
     try {
-      setLoading(true);
-      
-      const snapshot = await getDocs(collection(db, 'quests'));
-      const questsData: Quest[] = snapshot.docs.map(doc => {
-        const data = doc.data();
+        setLoading(true);
         
-        let status: "Available" | "In Progress" | "Completed";
-        
-        if (user && userProgress.completedQuests.includes(doc.id)) {
-          status = "Completed";
-        } else if (user && userProgress.inProgressQuests[doc.id]) {
-          status = "In Progress";
-        } else {
-          status = mapFirebaseStatus(data.status);
-        }
-
-        return {
-          id: doc.id,
-          title: data.title || "Untitled Quest",
-          description: data.description || "",
-          location: data.title || "Unknown Location",
-          difficulty: data.difficulty || "Medium",
-          points: data.rewardPoints || 0,
-          type: data.type || "Location",
-          status: status,
-          estimatedTime: data.estimatedTime || "30 min",
-          requirements: data.requirements || [],
-          position: parseCoordinates(data.building),
-          quizQuestions: data.quizQuestions || [],
-          requiredQuests: data.requiredQuests || []
+        // First, load user progress if user is logged in
+        let currentUserProgress: AppUserProgress = {
+        completedQuests: [],
+        inProgressQuests: {},
+        activeQuestId: null
         };
-      });
-      
-      setQuests(questsData);
 
-      if (user) {
+        if (user) {
         const progressDoc = await getDoc(doc(db, 'userProgress', user.uid));
         if (progressDoc.exists()) {
-          const firestoreData = progressDoc.data() as FirestoreUserProgress;
-          // Convert Firestore data to app data
-          const appUserProgress = convertToAppUserProgress(firestoreData);
-          
-          setUserProgress(appUserProgress);
-          
-          if (appUserProgress.activeQuestId && appUserProgress.inProgressQuests[appUserProgress.activeQuestId]) {
-            const questProgress = appUserProgress.inProgressQuests[appUserProgress.activeQuestId];
+            const firestoreData = progressDoc.data() as FirestoreUserProgress;
+            currentUserProgress = convertToAppUserProgress(firestoreData);
+            
+            setUserProgress(currentUserProgress);
+            
+            if (currentUserProgress.activeQuestId && currentUserProgress.inProgressQuests[currentUserProgress.activeQuestId]) {
+            const questProgress = currentUserProgress.inProgressQuests[currentUserProgress.activeQuestId];
             setActiveQuestState({
-              questId: appUserProgress.activeQuestId,
-              startedAt: questProgress.startedAt,
-              lastActivity: new Date(),
-              status: questProgress.paused ? "paused" : "active"
+                questId: currentUserProgress.activeQuestId,
+                startedAt: questProgress.startedAt,
+                lastActivity: new Date(),
+                status: questProgress.paused ? "paused" : "active"
             });
-          }
+            }
         } else {
-          const initialProgress: AppUserProgress = {
-            completedQuests: [],
-            inProgressQuests: {},
-            activeQuestId: null
-          };
-          await setDoc(doc(db, 'userProgress', user.uid), initialProgress);
-          setUserProgress(initialProgress);
+            // Create initial progress document
+            await setDoc(doc(db, 'userProgress', user.uid), currentUserProgress);
+            setUserProgress(currentUserProgress);
         }
-      }
+        }
+
+        // Now load quests with the current user progress
+        const snapshot = await getDocs(collection(db, 'quests'));
+        
+        console.log("🔍 Firestore quests snapshot:", snapshot.docs.length, "documents");
+        snapshot.docs.forEach(doc => {
+        console.log("📄 Quest document:", doc.id, doc.data());
+        });
+        
+        const questsData: Quest[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log("🔄 Mapping quest:", doc.id, data);
+        
+        // Determine status based on current user progress
+        let status: "Available" | "In Progress" | "Completed";
+        
+        if (currentUserProgress.completedQuests.includes(doc.id)) {
+            status = "Completed";
+            console.log(`✅ Quest ${doc.id} is COMPLETED`);
+        } else if (currentUserProgress.inProgressQuests[doc.id]) {
+            status = "In Progress";
+            console.log(`🔄 Quest ${doc.id} is IN PROGRESS`);
+        } else {
+            status = "Available";
+            console.log(`📋 Quest ${doc.id} is AVAILABLE`);
+        }
+
+        // Helper to capitalize first letter
+        const capitalizeFirst = (str: string) => 
+            str ? str.charAt(0).toUpperCase() + str.slice(1) : "Unknown";
+
+        return {
+            id: doc.id,
+            title: data.title || "Untitled Quest",
+            description: data.description || "",
+            location: data.location || "Unknown Location",
+            difficulty: capitalizeFirst(data.difficulty) as "Easy" | "Medium" | "Hard" || "Medium",
+            points: data.points || 0,
+            type: capitalizeFirst(data.type) as "Location" | "Treasure" | "Challenge" || "Location",
+            status: status,
+            estimatedTime: data.estimatedTime || "30 min",
+            requirements: data.requirements || [],
+            position: data.position || { lat: -26.1915, lng: 28.0309 },
+            quizQuestions: data.quizQuestions || [],
+            requiredQuests: data.requiredQuests || []
+        };
+        });
+        
+        console.log("✅ Final quests data:", questsData);
+        setQuests(questsData);
+
     } catch (error) {
-      console.error('Error fetching quests:', error);
+        console.error('❌ Error fetching quests:', error);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+    };
 
   useEffect(() => {
     refreshQuests();

@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MapPin } from "lucide-react";
 
 //
 // ──────────────────────────────── QUESTS ────────────────────────────────
@@ -47,6 +48,11 @@ const questSchema = z.object({
   description: z.string().min(5, "Description must be at least 5 characters"),
   points: z.coerce.number().min(1, "Points must be greater than 0"),
   difficulty: z.enum(["easy", "medium", "hard"]),
+  // Remove location from required fields or make it optional
+  // location: z.string().min(1, "Location address is required"),
+  lat: z.coerce.number().min(-90).max(90, "Latitude must be between -90 and 90"),
+  lng: z.coerce.number().min(-180).max(180, "Longitude must be between -180 and 180"),
+  type: z.enum(["qr", "location", "quiz"]).default("location"),
 });
 
 const QuestForm = ({
@@ -62,24 +68,92 @@ const QuestForm = ({
       description: "",
       points: 10,
       difficulty: "easy",
+      location: "",
+      lat: -26.1915, // Default to your campus center
+      lng: 28.0309,
+      type: "location",
     },
   });
 
   useEffect(() => {
     if (editingQuest) {
-      form.reset(editingQuest);
+      // Handle both nested position object and flat lat/lng fields
+      const questData = editingQuest.position 
+        ? {
+            ...editingQuest,
+            lat: editingQuest.position.lat,
+            lng: editingQuest.position.lng,
+          }
+        : editingQuest;
+      
+      form.reset(questData);
     } else {
       form.reset({
         title: "",
         description: "",
         points: 10,
         difficulty: "easy",
+        location: "",
+        lat: -26.1915,
+        lng: 28.0309,
+        type: "location",
       });
     }
   }, [editingQuest, form]);
 
+  // Function to handle coordinate picking from Google Maps
+  const handlePickCoordinates = () => {
+    // Open Google Maps in a new tab
+    window.open('https://www.google.com/maps', '_blank');
+    
+    // Show instructions to the user
+    alert(`How to get coordinates:
+1. Google Maps will open in a new tab
+2. Right-click on any location on the map
+3. Select "What's here?" from the menu
+4. Copy the coordinates from the info box
+5. Paste them in the latitude and longitude fields below
+
+Format: latitude,longitude (e.g., -26.19045,28.02629)`);
+  };
+
+  // Function to handle coordinate string input (e.g., "-26.19045,28.02629")
+  const handleCoordinateInput = (coordinateString: string) => {
+    if (!coordinateString) return;
+    
+    try {
+      const [latStr, lngStr] = coordinateString.split(',');
+      const lat = parseFloat(latStr.trim());
+      const lng = parseFloat(lngStr.trim());
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+        form.setValue('lat', lat);
+        form.setValue('lng', lng);
+      }
+    } catch (error) {
+      console.error('Invalid coordinate format:', error);
+    }
+  };
+
   const handleSubmit = async (data) => {
-    const success = await onSubmit(data);
+    const questData = {
+      title: data.title,
+      description: data.description,
+      points: data.points,
+      difficulty: data.difficulty,
+      location: "Campus Location",
+      type: data.type,
+      position: {
+        lat: data.lat,
+        lng: data.lng,
+      },
+      estimatedTime: "30 min",
+      requirements: [],
+      status: "active", // This is important for initial status
+      createdAt: new Date(),
+    };
+
+    const success = await onSubmit(questData);
     if (success && !editingQuest) {
       form.reset();
     }
@@ -127,44 +201,193 @@ const QuestForm = ({
                 </FormItem>
               )}
             />
+            
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                name="points"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Points</FormLabel>
+                    <FormControl>
+                      <Input type="number" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                name="difficulty"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Difficulty</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select difficulty" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
-              name="points"
+              name="type"
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Points</FormLabel>
-                  <FormControl>
-                    <Input type="number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              name="difficulty"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Difficulty</FormLabel>
+                  <FormLabel>Quest Type</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select difficulty" />
+                        <SelectValue placeholder="Select quest type" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="easy">Easy</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="hard">Hard</SelectItem>
+                      <SelectItem value="qr">QR Code</SelectItem>
+                      <SelectItem value="location">Location</SelectItem>
+                      <SelectItem value="quiz">Quiz</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* <FormField
+              name="location"
+              control={form.control}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Location Address</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="e.g., MSL Labs, Building 10, Room 101" 
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            /> */}
+
+            {/* Enhanced Coordinates Section with Google Maps Picker */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base">Location Coordinates</FormLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePickCoordinates}
+                  className="flex items-center gap-2"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Pick on Google Maps
+                </Button>
+              </div>
+
+              {/* Quick Coordinate Input */}
+              <div className="space-y-2">
+                <FormLabel className="text-sm">Quick Coordinate Input</FormLabel>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Paste coordinates: -26.19045,28.02629"
+                    onChange={(e) => handleCoordinateInput(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const input = document.querySelector('input[placeholder*="Paste coordinates"]') as HTMLInputElement;
+                      if (input) handleCoordinateInput(input.value);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste coordinates in "lat,lng" format from Google Maps
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  name="lat"
+                  control={form.control}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Latitude</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="any"
+                          placeholder="-26.1915" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  name="lng"
+                  control={form.control}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Longitude</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="any"
+                          placeholder="28.0309" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Instructions Box */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                How to get coordinates from Google Maps:
+              </h4>
+              <ol className="text-sm text-blue-700 dark:text-blue-400 space-y-1 list-decimal list-inside">
+                <li>Click "Pick on Google Maps" to open Google Maps in a new tab</li>
+                <li>Right-click any location and select "What's here?"</li>
+                <li>Copy the coordinates (latitude,longitude) from the info box</li>
+                <li>Paste them in the "Quick Coordinate Input" field or enter manually below</li>
+                <li>Coordinates will auto-populate in the latitude and longitude fields</li>
+              </ol>
+              <div className="mt-2 text-xs text-blue-600 dark:text-blue-500">
+                <strong>Format:</strong> <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">-26.19045,28.02629</code>
+              </div>
+            </div>
+
+            {/* Quick Location Buttons */}
+ 
+
             <div className="flex gap-4">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
@@ -190,35 +413,52 @@ const QuestForm = ({
   );
 };
 
-const QuestCard = ({ quest, onEdit, onDelete }) => (
-  <Card className="hover:shadow-lg transition bg-gradient-to-br from-card to-card/80 border border-blue-500/20">
-    <CardHeader>
-      <CardTitle>{quest.title}</CardTitle>
-    </CardHeader>
-    <CardContent>
-      <p className="text-sm text-muted-foreground">
-        {quest.description}
-      </p>
-      <p className="mt-2 text-sm">Points: {quest.points}</p>
-      <p className="text-xs text-muted-foreground">
-        Difficulty: {quest.difficulty}
-      </p>
-      <div className="flex gap-2 mt-3">
-        <Button size="sm" variant="outline" onClick={() => onEdit(quest)}>
-          Edit
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onDelete(quest)}
-          className="text-destructive"
-        >
-          Delete
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
+const QuestCard = ({ quest, onEdit, onDelete }) => {
+  // Handle both nested position and flat position data
+  const position = quest.position || quest;
+  const location = quest.location || "No location set";
+  
+  return (
+    <Card className="hover:shadow-lg transition bg-gradient-to-br from-card to-card/80 border border-blue-500/20">
+      <CardHeader>
+        <CardTitle className="flex justify-between items-start">
+          <span>{quest.title}</span>
+          <span className="text-xs font-normal bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded">
+            {quest.type || "location"}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          {quest.description}
+        </p>
+        <div className="mt-3 space-y-2 text-sm">
+          <p><strong>Points:</strong> {quest.points}</p>
+          <p><strong>Difficulty:</strong> {quest.difficulty}</p>
+          <p><strong>Location:</strong> {location}</p>
+          {position && (
+            <p className="text-xs text-muted-foreground">
+              <strong>Coordinates:</strong> {position.lat?.toFixed(6)}, {position.lng?.toFixed(6)}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2 mt-3">
+          <Button size="sm" variant="outline" onClick={() => onEdit(quest)}>
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDelete(quest)}
+            className="text-destructive"
+          >
+            Delete
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 //
 // ──────────────────────────────── COLLECTIBLES ────────────────────────────────
@@ -382,11 +622,11 @@ const CollectibleCard = ({ collectible, onEdit, onDelete }) => (
     <CardHeader className="flex items-center gap-3">
       <img
         src={collectible.iconUrl}
-        alt={collectible.title}
+        alt={collectible.name}
         className="w-12 h-12 rounded"
       />
       <div>
-        <h3 className="font-bold">{collectible.title}</h3>
+        <h3 className="font-bold">{collectible.name}</h3>
         <p className="text-xs text-muted-foreground">
           {collectible.rarity}
         </p>

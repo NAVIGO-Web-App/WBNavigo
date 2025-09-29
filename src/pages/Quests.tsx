@@ -9,10 +9,6 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuest } from "@/contexts/QuestContext"; // Make sure this import exists
 
-// Remove the old Quest interface since it's now in QuestContext
-// Remove the old parseCoordinates function since it's now in QuestContext
-// Remove the old fetchQuests logic since it's now in QuestContext
-
 const Quests = () => {
   const [selectedTab, setSelectedTab] = useState("all");
   const { 

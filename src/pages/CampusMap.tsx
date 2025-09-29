@@ -4,7 +4,7 @@ import { GoogleMap, Marker, useJsApiLoader, DirectionsRenderer } from "@react-go
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Star, Clock, Navigation, Play } from "lucide-react";
+import { MapPin, Star, Clock, Navigation, Play, AlertCircle } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import Header from "@/components/Header";
 import { useQuest } from "@/contexts/QuestContext";
@@ -39,9 +39,26 @@ const CampusMap = () => {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [lastDirectionPosition, setLastDirectionPosition] = useState<Position | null>(null);
   const [positionUpdateCount, setPositionUpdateCount] = useState(0);
+  const [directionsError, setDirectionsError] = useState<string | null>(null);
+  const [isCalculatingDirections, setIsCalculatingDirections] = useState(false);
   const { theme } = useTheme();
   const mapRef = useRef<google.maps.Map | null>(null);
+  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
   
+  // Fix: Use consistent libraries and add error handling
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: "AIzaSyDGZlh6l1MFfoGpOh5ip1OxRjCiBd95_3Y",
+    libraries: ["places", "geometry"] // Include both libraries to avoid conflicts
+  });
+
+  // Initialize directions service once Google Maps is loaded
+  useEffect(() => {
+    if (isLoaded && window.google && window.google.maps) {
+      directionsServiceRef.current = new window.google.maps.DirectionsService();
+    }
+  }, [isLoaded]);
+
   // Memoized significant movement checker
   const isSignificantMovement = useCallback((newPosition: Position, lastPosition: Position | null): boolean => {
     if (!lastPosition) return true;
@@ -59,40 +76,63 @@ const CampusMap = () => {
     return distance > 10; // Only recalculate if moved more than 10 meters
   }, []);
 
-  // Memoized directions calculator
-  const calculateDirections = useCallback((quest: Quest) => {
+  // Memoized directions calculator with proper Google Maps API check
+  const calculateDirections = useCallback(async (quest: Quest) => {
     if (!userPosition) {
       console.log("User position not available for directions");
       return;
     }
 
+    // Check if Google Maps API is loaded and directions service is available
+    if (!directionsServiceRef.current) {
+      console.error("Directions service not available yet");
+      setDirectionsError("Maps service not ready. Please wait...");
+      return;
+    }
+
+    // Clear previous errors
+    setDirectionsError(null);
+    setIsCalculatingDirections(true);
+
     console.log("Calculating directions from:", userPosition, "to:", quest.position);
 
-    const directionsService = new google.maps.DirectionsService();
-    directionsService.route(
-      {
-        origin: userPosition,
-        destination: quest.position,
-        travelMode: google.maps.TravelMode.WALKING,
-      },
-      (result, status) => {
-        if (status === "OK" && result) {
-          setDirections(result);
-          console.log("Directions calculated successfully");
-        } else {
-          console.error("Directions request failed:", status);
-          setDirections(null);
+    try {
+      const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
+        if (!directionsServiceRef.current) {
+          reject(new Error("Directions service not available"));
+          return;
         }
-      }
-    );
+
+        directionsServiceRef.current.route(
+          {
+            origin: userPosition,
+            destination: quest.position,
+            travelMode: google.maps.TravelMode.WALKING,
+          },
+          (result, status) => {
+            if (status === "OK" && result) {
+              resolve(result);
+            } else {
+              reject(new Error(`Directions request failed: ${status}`));
+            }
+          }
+        );
+      });
+
+      setDirections(result);
+      setLastDirectionPosition(userPosition);
+      console.log("Directions calculated successfully");
+      
+    } catch (error) {
+      console.error("Directions calculation error:", error);
+      setDirectionsError(error instanceof Error ? error.message : "Failed to calculate directions");
+      setDirections(null);
+    } finally {
+      setIsCalculatingDirections(false);
+    }
   }, [userPosition]);
 
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: "AIzaSyDGZlh6l1MFfoGpOh5ip1OxRjCiBd95_3Y",
-  });
-
-  // Get user position with significant movement detection - FIXED
+  // Get user position with significant movement detection
   useEffect(() => {
     let watchId: number;
     let mounted = true;
@@ -114,11 +154,14 @@ const CampusMap = () => {
             console.log("Significant position update:", newPosition);
           }
         },
-        (err) => console.error("Geolocation error:", err),
+        (err) => {
+          console.error("Geolocation error:", err);
+          setDirectionsError("Unable to get your current location");
+        },
         { 
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 0
+          maximumAge: 30000 // Cache position for 30 seconds to reduce updates
         }
       );
     }
@@ -129,7 +172,7 @@ const CampusMap = () => {
     };
   }, [updateLastActivity, isSignificantMovement, userPosition]);
 
-  // Handle quest auto-selection from navigation state or active quest - FIXED
+  // Handle quest auto-selection from navigation state or active quest
   useEffect(() => {
     if (quests.length > 0) {
       let questToSelect = null;
@@ -163,8 +206,11 @@ const CampusMap = () => {
     }
   }, [selectedQuest, isLoaded]);
 
-  // Calculate directions only on significant changes - FIXED
+  // Calculate directions only on significant changes - FIXED with proper Google Maps API check
   useEffect(() => {
+    // Skip if Google Maps API is not loaded or no directions service
+    if (!isLoaded || !directionsServiceRef.current) return;
+
     // Skip the very first position update
     if (positionUpdateCount === 0 && userPosition) {
       setPositionUpdateCount(1);
@@ -174,18 +220,22 @@ const CampusMap = () => {
     if (selectedQuest && userPosition) {
       // Only calculate if we don't have directions OR position changed significantly
       if (!lastDirectionPosition || isSignificantMovement(userPosition, lastDirectionPosition)) {
+        // Clear previous directions while calculating new ones
+        setDirections(null);
         calculateDirections(selectedQuest);
-        setLastDirectionPosition(userPosition);
       }
     } else {
       setDirections(null);
       setLastDirectionPosition(null);
+      setDirectionsError(null);
     }
-  }, [selectedQuest, userPosition, lastDirectionPosition, isSignificantMovement, calculateDirections, positionUpdateCount]);
+  }, [selectedQuest, userPosition, lastDirectionPosition, isSignificantMovement, calculateDirections, positionUpdateCount, isLoaded]);
 
   const handleQuestClick = useCallback((quest: Quest) => {
     setSelectedQuest(quest);
     updateLastActivity();
+    // Clear directions error when selecting new quest
+    setDirectionsError(null);
   }, [updateLastActivity]);
 
   const handleStartQuest = useCallback(() => {
@@ -209,6 +259,12 @@ const CampusMap = () => {
     }
   }, []);
 
+  const retryDirections = useCallback(() => {
+    if (selectedQuest) {
+      calculateDirections(selectedQuest);
+    }
+  }, [selectedQuest, calculateDirections]);
+
   const isQuestInProgress = selectedQuest ? userProgress.inProgressQuests[selectedQuest.id] : false;
   const isQuestCompleted = selectedQuest ? userProgress.completedQuests.includes(selectedQuest.id) : false;
 
@@ -221,6 +277,26 @@ const CampusMap = () => {
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
               <p className="text-muted-foreground">Loading quests...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state for Google Maps
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading Google Maps...</p>
+              {loadError && (
+                <p className="text-destructive mt-2">Error loading maps: {loadError.message}</p>
+              )}
             </div>
           </div>
         </div>
@@ -251,96 +327,91 @@ const CampusMap = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {!isLoaded ? (
-                  <div className="h-96 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Loading map...</p>
-                    </div>
-                  </div>
-                ) : (
-                  <GoogleMap
-                    mapContainerStyle={containerStyle}
-                    center={selectedQuest?.position || userPosition || center}
-                    zoom={selectedQuest ? 17 : 15}
-                    onLoad={(map) => {
-                      mapRef.current = map;
-                    }}
-                  >
-                    {/* User position */}
-                    {userPosition && (
-                      <Marker 
-                        position={userPosition} 
-                        label="📍"
-                        title="Your current location"
-                        icon={{
+                <GoogleMap
+                  mapContainerStyle={containerStyle}
+                  center={selectedQuest?.position || userPosition || center}
+                  zoom={selectedQuest ? 17 : 15}
+                  onLoad={(map) => {
+                    mapRef.current = map;
+                  }}
+                  options={{
+                    disableDefaultUI: false,
+                    zoomControl: true,
+                  }}
+                >
+                  {/* User position */}
+                  {userPosition && (
+                    <Marker 
+                      position={userPosition} 
+                      label="📍"
+                      title="Your current location"
+                      icon={{
+                        url: "data:image/svg+xml;base64," + btoa(`
+                          <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="16" cy="16" r="12" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
+                            <circle cx="16" cy="16" r="4" fill="#FFFFFF"/>
+                          </svg>
+                        `),
+                        scaledSize: new google.maps.Size(32, 32),
+                      }}
+                    />
+                  )}
+
+                  {/* Quest markers */}
+                  {quests.map((quest: Quest) => {
+                    const isSelected = selectedQuest?.id === quest.id;
+                    const isCompleted = userProgress.completedQuests.includes(quest.id);
+                    const isInProgress = userProgress.inProgressQuests[quest.id];
+                    
+                    return (
+                      <Marker
+                        key={quest.id}
+                        position={quest.position}
+                        onClick={() => handleQuestClick(quest)}
+                        title={quest.title}
+                        icon={isSelected ? {
+                          url: "data:image/svg+xml;base64," + btoa(`
+                            <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="18" cy="18" r="16" fill="#10B981" stroke="#FFFFFF" stroke-width="3"/>
+                              <circle cx="18" cy="18" r="8" fill="#FFFFFF"/>
+                            </svg>
+                          `),
+                          scaledSize: new google.maps.Size(36, 36),
+                        } : isCompleted ? {
                           url: "data:image/svg+xml;base64," + btoa(`
                             <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                              <circle cx="16" cy="16" r="12" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
-                              <circle cx="16" cy="16" r="4" fill="#FFFFFF"/>
+                              <circle cx="16" cy="16" r="14" fill="#22C55E" stroke="#FFFFFF" stroke-width="2"/>
+                              <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
+                            </svg>
+                          `),
+                          scaledSize: new google.maps.Size(32, 32),
+                        } : isInProgress ? {
+                          url: "data:image/svg+xml;base64," + btoa(`
+                            <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="16" cy="16" r="14" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
+                              <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
+                            </svg>
+                          `),
+                          scaledSize: new google.maps.Size(32, 32),
+                        } : {
+                          url: "data:image/svg+xml;base64," + btoa(`
+                            <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="16" cy="16" r="14" fill="#EF4444" stroke="#FFFFFF" stroke-width="2"/>
+                              <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
                             </svg>
                           `),
                           scaledSize: new google.maps.Size(32, 32),
                         }}
+                        zIndex={isSelected ? 1000 : 500}
                       />
-                    )}
+                    );
+                  })}
 
-                    {/* Quest markers */}
-                    {quests.map((quest: Quest) => {
-                      const isSelected = selectedQuest?.id === quest.id;
-                      const isCompleted = userProgress.completedQuests.includes(quest.id);
-                      const isInProgress = userProgress.inProgressQuests[quest.id];
-                      
-                      return (
-                        <Marker
-                          key={quest.id}
-                          position={quest.position}
-                          onClick={() => handleQuestClick(quest)}
-                          title={quest.title}
-                          icon={isSelected ? {
-                            url: "data:image/svg+xml;base64," + btoa(`
-                              <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="18" cy="18" r="16" fill="#10B981" stroke="#FFFFFF" stroke-width="3"/>
-                                <circle cx="18" cy="18" r="8" fill="#FFFFFF"/>
-                              </svg>
-                            `),
-                            scaledSize: new google.maps.Size(36, 36),
-                          } : isCompleted ? {
-                            url: "data:image/svg+xml;base64," + btoa(`
-                              <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="16" cy="16" r="14" fill="#22C55E" stroke="#FFFFFF" stroke-width="2"/>
-                                <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
-                              </svg>
-                            `),
-                            scaledSize: new google.maps.Size(32, 32),
-                          } : isInProgress ? {
-                            url: "data:image/svg+xml;base64," + btoa(`
-                              <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="16" cy="16" r="14" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
-                                <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
-                              </svg>
-                            `),
-                            scaledSize: new google.maps.Size(32, 32),
-                          } : {
-                            url: "data:image/svg+xml;base64," + btoa(`
-                              <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="16" cy="16" r="14" fill="#EF4444" stroke="#FFFFFF" stroke-width="2"/>
-                                <circle cx="16" cy="16" r="6" fill="#FFFFFF"/>
-                              </svg>
-                            `),
-                            scaledSize: new google.maps.Size(32, 32),
-                          }}
-                          zIndex={isSelected ? 1000 : 500}
-                        />
-                      );
-                    })}
-
-                    {/* Directions to selected quest */}
-                    {directions && selectedQuest && (
-                      <DirectionsRenderer directions={directions} />
-                    )}
-                  </GoogleMap>
-                )}
+                  {/* Directions to selected quest */}
+                  {directions && selectedQuest && (
+                    <DirectionsRenderer directions={directions} />
+                  )}
+                </GoogleMap>
               </CardContent>
             </Card>
           </div>
@@ -385,18 +456,42 @@ const CampusMap = () => {
                     </div>
                   </div>
 
-                  {directions && directions.routes[0]?.legs[0] && (
-                    <div className="pt-4 border-t border-border dark:border-gray-600">
-                      <h4 className="font-medium mb-2 flex items-center space-x-2">
-                        <Navigation className="w-4 h-4 text-primary" />
-                        <span>Directions</span>
-                      </h4>
+                  {/* Directions Section with Error Handling */}
+                  <div className="pt-4 border-t border-border dark:border-gray-600">
+                    <h4 className="font-medium mb-2 flex items-center space-x-2">
+                      <Navigation className="w-4 h-4 text-primary" />
+                      <span>Directions</span>
+                      {isCalculatingDirections && (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      )}
+                    </h4>
+                    
+                    {directionsError ? (
+                      <div className="text-sm space-y-2">
+                        <div className="flex items-center space-x-2 text-destructive">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Failed to load directions</span>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={retryDirections}
+                          disabled={isCalculatingDirections}
+                        >
+                          {isCalculatingDirections ? "Retrying..." : "Retry Directions"}
+                        </Button>
+                      </div>
+                    ) : directions && directions.routes[0]?.legs[0] ? (
                       <div className="text-sm text-muted-foreground space-y-1">
                         <p>Distance: {directions.routes[0].legs[0].distance?.text}</p>
                         <p>Time: {directions.routes[0].legs[0].duration?.text}</p>
                       </div>
-                    </div>
-                  )}
+                    ) : isCalculatingDirections ? (
+                      <p className="text-sm text-muted-foreground">Calculating directions...</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Directions will appear here</p>
+                    )}
+                  </div>
 
                   <Button 
                     onClick={isQuestInProgress ? handleContinueQuest : handleStartQuest} 
