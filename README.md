@@ -6,7 +6,10 @@
   -  **Database**: Firebase Firestore
   -  **Authentication**: Firebase Auth
   -  **External API**: Google Maps APi for location verification
-
+**Documentation Hosting**
+- https://dulcet-kitsune-c38f78.netlify.app/
+- Hosted using Netlify
+   
 - We are using the Agile and SCRUM Methodology.
     
 **Repository Structure**
