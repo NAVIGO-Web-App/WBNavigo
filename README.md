@@ -5,13 +5,13 @@
   -  **Backend**: Node.js + Express.js
   -  **Database**: Firebase Firestore
   -  **Authentication**: Firebase Auth
-  -  **External API**: Google Maps APi for location verification
+  -  **External API**: Google Maps APi for location verification  
+- We are using the Agile and SCRUM Methodology.
     
 **Documentation Hosting**
 - https://dulcet-kitsune-c38f78.netlify.app/
 - Hosted using Netlify
-   
-- We are using the Agile and SCRUM Methodology.
+
     
 **Repository Structure**
 - The source codes are stored in the source folder and compiled there.
