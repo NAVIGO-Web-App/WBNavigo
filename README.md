@@ -1,3 +1,4 @@
+[![codecov](https://codecov.io/github/NAVIGO-Web-App/WBNavigo/graph/badge.svg?token=96BS6J8CIB)](https://codecov.io/github/NAVIGO-Web-App/WBNavigo)
 # NAVIGO - A Campus Quest Adventure
 **Project Overview**
 - NAVIGO is a location-based game for university students that encourages exploration through quests, treasure hunts and rewards. The application consists of:
