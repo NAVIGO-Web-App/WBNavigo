@@ -10,7 +10,7 @@
 - We are using the Agile and SCRUM Methodology.
     
 **Documentation Hosting**
-- https://dulcet-kitsune-c38f78.netlify.app/
+- https://navigo-documentation.netlify.app/
 - Hosted using Netlify
 
     
