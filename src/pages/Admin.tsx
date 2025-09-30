@@ -40,6 +40,49 @@ import {
 } from "@/components/ui/select";
 import { MapPin } from "lucide-react";
 
+// 🚨 ADDED: TypeScript interfaces for better type safety
+interface QuestFormData {
+  title: string;
+  description: string;
+  points: number;
+  difficulty: "easy" | "medium" | "hard";
+  lat: number;
+  lng: number;
+  type: "qr" | "location" | "quiz";
+  location?: string;
+}
+
+interface CollectibleFormData {
+  name: string;
+  description: string;
+  iconUrl: string;
+  rarity: "common" | "rare" | "epic" | "legendary";
+}
+
+interface Quest {
+  id: string;
+  title: string;
+  description: string;
+  points: number;
+  difficulty: string; // 🚨 FIXED: This can be string from Firestore
+  type: string;
+  location?: string;
+  position?: {
+    lat: number;
+    lng: number;
+  };
+  lat?: number;
+  lng?: number;
+}
+
+interface Collectible {
+  id: string;
+  name: string;
+  description: string;
+  iconUrl: string;
+  rarity: string;
+}
+
 //
 // ──────────────────────────────── QUESTS ────────────────────────────────
 //
@@ -48,20 +91,26 @@ const questSchema = z.object({
   description: z.string().min(5, "Description must be at least 5 characters"),
   points: z.coerce.number().min(1, "Points must be greater than 0"),
   difficulty: z.enum(["easy", "medium", "hard"]),
-  // Remove location from required fields or make it optional
-  // location: z.string().min(1, "Location address is required"),
   lat: z.coerce.number().min(-90).max(90, "Latitude must be between -90 and 90"),
   lng: z.coerce.number().min(-180).max(180, "Longitude must be between -180 and 180"),
   type: z.enum(["qr", "location", "quiz"]).default("location"),
 });
 
-const QuestForm = ({
+// 🚨 ADDED: Proper TypeScript props interface
+interface QuestFormProps {
+  onSubmit: (data: any) => Promise<boolean>;
+  editingQuest: Quest | null;
+  onCancel: () => void;
+  isSubmitting?: boolean;
+}
+
+const QuestForm: React.FC<QuestFormProps> = ({
   onSubmit,
   editingQuest,
   onCancel,
   isSubmitting = false,
 }) => {
-  const form = useForm({
+  const form = useForm<QuestFormData>({
     resolver: zodResolver(questSchema),
     defaultValues: {
       title: "",
@@ -77,14 +126,38 @@ const QuestForm = ({
 
   useEffect(() => {
     if (editingQuest) {
-      // Handle both nested position object and flat lat/lng fields
-      const questData = editingQuest.position 
-        ? {
-            ...editingQuest,
-            lat: editingQuest.position.lat,
-            lng: editingQuest.position.lng,
-          }
-        : editingQuest;
+      // 🚨 FIXED: Handle both nested position object and flat lat/lng fields consistently
+      // 🚨 FIXED: Type conversion for difficulty field
+      let questData: QuestFormData;
+      
+      // Convert string difficulty to the specific union type
+      const difficulty = (editingQuest.difficulty.toLowerCase() as "easy" | "medium" | "hard") || "easy";
+      
+      if (editingQuest.position) {
+        // Has nested position
+        questData = {
+          title: editingQuest.title,
+          description: editingQuest.description,
+          points: editingQuest.points,
+          difficulty: difficulty,
+          location: editingQuest.location || "",
+          lat: editingQuest.position.lat,
+          lng: editingQuest.position.lng,
+          type: (editingQuest.type as "qr" | "location" | "quiz") || "location",
+        };
+      } else {
+        // Has flat lat/lng
+        questData = {
+          title: editingQuest.title,
+          description: editingQuest.description,
+          points: editingQuest.points,
+          difficulty: difficulty,
+          location: editingQuest.location || "",
+          lat: editingQuest.lat || -26.1915,
+          lng: editingQuest.lng || 28.0309,
+          type: (editingQuest.type as "qr" | "location" | "quiz") || "location",
+        };
+      }
       
       form.reset(questData);
     } else {
@@ -135,15 +208,16 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
     }
   };
 
-  const handleSubmit = async (data) => {
+  const handleSubmit = async (data: QuestFormData) => {
+    // 🚨 FIXED: Always use nested position structure for consistency
     const questData = {
       title: data.title,
       description: data.description,
       points: data.points,
       difficulty: data.difficulty,
-      location: "Campus Location",
+      location: data.location || "Campus Location",
       type: data.type,
-      position: {
+      position: { // ✅ Always use nested position for consistency
         lat: data.lat,
         lng: data.lng,
       },
@@ -269,23 +343,6 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
               )}
             />
 
-            {/* <FormField
-              name="location"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Location Address</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="e.g., MSL Labs, Building 10, Room 101" 
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-
             {/* Enhanced Coordinates Section with Google Maps Picker */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -385,9 +442,6 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
               </div>
             </div>
 
-            {/* Quick Location Buttons */}
- 
-
             <div className="flex gap-4">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
@@ -413,9 +467,16 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
   );
 };
 
-const QuestCard = ({ quest, onEdit, onDelete }) => {
-  // Handle both nested position and flat position data
-  const position = quest.position || quest;
+// 🚨 ADDED: Proper TypeScript props interface
+interface QuestCardProps {
+  quest: Quest;
+  onEdit: (quest: Quest) => void;
+  onDelete: (quest: Quest) => void;
+}
+
+const QuestCard: React.FC<QuestCardProps> = ({ quest, onEdit, onDelete }) => {
+  // 🚨 FIXED: Handle both nested position and flat position data consistently
+  const position = quest.position || { lat: quest.lat, lng: quest.lng };
   const location = quest.location || "No location set";
   
   return (
@@ -436,9 +497,9 @@ const QuestCard = ({ quest, onEdit, onDelete }) => {
           <p><strong>Points:</strong> {quest.points}</p>
           <p><strong>Difficulty:</strong> {quest.difficulty}</p>
           <p><strong>Location:</strong> {location}</p>
-          {position && (
+          {position && position.lat && (
             <p className="text-xs text-muted-foreground">
-              <strong>Coordinates:</strong> {position.lat?.toFixed(6)}, {position.lng?.toFixed(6)}
+              <strong>Coordinates:</strong> {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
             </p>
           )}
         </div>
@@ -472,13 +533,21 @@ const collectibleSchema = z.object({
   rarity: z.enum(["common", "rare", "epic", "legendary"]),
 });
 
-const CollectibleForm = ({
+// 🚨 ADDED: Proper TypeScript props interface
+interface CollectibleFormProps {
+  onSubmit: (data: any) => Promise<boolean>;
+  editingCollectible: Collectible | null;
+  onCancel: () => void;
+  isSubmitting?: boolean;
+}
+
+const CollectibleForm: React.FC<CollectibleFormProps> = ({
   onSubmit,
   editingCollectible,
   onCancel,
   isSubmitting = false,
 }) => {
-  const form = useForm({
+  const form = useForm<CollectibleFormData>({
     resolver: zodResolver(collectibleSchema),
     defaultValues: {
       name: "",
@@ -490,7 +559,14 @@ const CollectibleForm = ({
 
   useEffect(() => {
     if (editingCollectible) {
-      form.reset(editingCollectible);
+      // 🚨 FIXED: Type conversion for rarity field
+      const formData: CollectibleFormData = {
+        name: editingCollectible.name,
+        description: editingCollectible.description,
+        iconUrl: editingCollectible.iconUrl,
+        rarity: (editingCollectible.rarity.toLowerCase() as "common" | "rare" | "epic" | "legendary") || "common",
+      };
+      form.reset(formData);
     } else {
       form.reset({
         name: "",
@@ -501,7 +577,7 @@ const CollectibleForm = ({
     }
   }, [editingCollectible, form]);
 
-  const handleSubmit = async (data) => {
+  const handleSubmit = async (data: CollectibleFormData) => {
     const success = await onSubmit(data);
     if (success && !editingCollectible) {
       form.reset();
@@ -617,7 +693,14 @@ const CollectibleForm = ({
   );
 };
 
-const CollectibleCard = ({ collectible, onEdit, onDelete }) => (
+// 🚨 ADDED: Proper TypeScript props interface
+interface CollectibleCardProps {
+  collectible: Collectible;
+  onEdit: (collectible: Collectible) => void;
+  onDelete: (collectible: Collectible) => void;
+}
+
+const CollectibleCard: React.FC<CollectibleCardProps> = ({ collectible, onEdit, onDelete }) => (
   <Card className="hover:shadow-lg transition bg-gradient-to-br from-card to-card/80 border border-purple-500/20">
     <CardHeader className="flex items-center gap-3">
       <img
@@ -661,20 +744,20 @@ const CollectibleCard = ({ collectible, onEdit, onDelete }) => (
 // ──────────────────────────────── HOOKS ────────────────────────────────
 //
 const useQuests = () => {
-  const [quests, setQuests] = useState([]);
+  const [quests, setQuests] = useState<Quest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "quests"), (snapshot) => {
       setQuests(
-        snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Quest))
       );
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  const addQuest = async (data) => {
+  const addQuest = async (data: any) => {
     await addDoc(collection(db, "quests"), {
       ...data,
       createdAt: new Date(),
@@ -682,12 +765,12 @@ const useQuests = () => {
     return true;
   };
 
-  const updateQuest = async (id, data) => {
+  const updateQuest = async (id: string, data: any) => {
     await updateDoc(doc(db, "quests", id), data);
     return true;
   };
 
-  const deleteQuest = async (id) => {
+  const deleteQuest = async (id: string) => {
     await deleteDoc(doc(db, "quests", id));
     return true;
   };
@@ -696,7 +779,7 @@ const useQuests = () => {
 };
 
 const useCollectibles = () => {
-  const [collectibles, setCollectibles] = useState([]);
+  const [collectibles, setCollectibles] = useState<Collectible[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -704,7 +787,7 @@ const useCollectibles = () => {
       collection(db, "collectibles"),
       (snapshot) => {
         setCollectibles(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Collectible))
         );
         setLoading(false);
       }
@@ -712,7 +795,7 @@ const useCollectibles = () => {
     return unsubscribe;
   }, []);
 
-  const addCollectible = async (data) => {
+  const addCollectible = async (data: any) => {
     await addDoc(collection(db, "collectibles"), {
       ...data,
       createdAt: new Date(),
@@ -720,12 +803,12 @@ const useCollectibles = () => {
     return true;
   };
 
-  const updateCollectible = async (id, data) => {
+  const updateCollectible = async (id: string, data: any) => {
     await updateDoc(doc(db, "collectibles", id), data);
     return true;
   };
 
-  const deleteCollectible = async (id) => {
+  const deleteCollectible = async (id: string) => {
     await deleteDoc(doc(db, "collectibles", id));
     return true;
   };
@@ -751,7 +834,7 @@ export default function Admin() {
     updateQuest,
     deleteQuest,
   } = useQuests();
-  const [editingQuest, setEditingQuest] = useState(null);
+  const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
 
   // collectibles
   const {
@@ -761,7 +844,7 @@ export default function Admin() {
     updateCollectible,
     deleteCollectible,
   } = useCollectibles();
-  const [editingCollectible, setEditingCollectible] = useState(null);
+  const [editingCollectible, setEditingCollectible] = useState<Collectible | null>(null);
 
   return (
     <div className="container mx-auto py-10 space-y-10">

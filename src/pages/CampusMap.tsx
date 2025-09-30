@@ -33,7 +33,16 @@ const center = { lat: -26.1915, lng: 28.0309 };
 const CampusMap = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { quests, userProgress, loading, activeQuest, updateLastActivity } = useQuest();
+  const { 
+    quests, 
+    userProgress, 
+    loading, 
+    activeQuest, 
+    updateLastActivity, 
+    completeLocationQuest,
+    completeQuest,
+    refreshQuests 
+  } = useQuest();
   const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null);
   const [userPosition, setUserPosition] = useState<Position | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
@@ -74,6 +83,19 @@ const CampusMap = () => {
     const distance = R * c;
     
     return distance > 10; // Only recalculate if moved more than 10 meters
+  }, []);
+
+  // Distance calculation function (same as in QuestContext)
+  const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   }, []);
 
   // Memoized directions calculator with proper Google Maps API check
@@ -230,6 +252,55 @@ const CampusMap = () => {
       setDirectionsError(null);
     }
   }, [selectedQuest, userPosition, lastDirectionPosition, isSignificantMovement, calculateDirections, positionUpdateCount, isLoaded]);
+
+  // Automatic location quest completion
+  useEffect(() => {
+    if (!userPosition || !activeQuest) return;
+
+    const activeQuestData = quests.find(q => q.id === activeQuest.questId);
+    if (!activeQuestData || activeQuestData.type !== "Location") return;
+
+    // Don't complete if already completed
+    if (userProgress.completedQuests.includes(activeQuest.questId)) return;
+
+    const isAtLocation = completeLocationQuest(activeQuest.questId, userPosition);
+    
+    if (isAtLocation) {
+      console.log(`🎉 Success! Completed location quest: ${activeQuestData.title}`);
+      alert(`🎉 Quest Completed! You've reached ${activeQuestData.title}`);
+      refreshQuests();
+    }
+  }, [userPosition, activeQuest, quests, completeLocationQuest, refreshQuests, userProgress.completedQuests]);
+
+  // Debug function for location detection
+  const checkLocationDebug = useCallback(() => {
+    if (userPosition && activeQuest) {
+      const activeQuestData = quests.find(q => q.id === activeQuest.questId);
+      if (activeQuestData && activeQuestData.type === "Location") {
+        const distance = calculateDistance(
+          userPosition.lat, userPosition.lng,
+          activeQuestData.position.lat, activeQuestData.position.lng
+        );
+        
+        console.log(`📍 DEBUG - Active Quest: ${activeQuestData.title}`);
+        console.log(`📍 DEBUG - Your position: ${userPosition.lat}, ${userPosition.lng}`);
+        console.log(`📍 DEBUG - Quest position: ${activeQuestData.position.lat}, ${activeQuestData.position.lng}`);
+        console.log(`📍 DEBUG - Distance: ${distance.toFixed(2)} meters`);
+        console.log(`📍 DEBUG - Completion radius: 50 meters`);
+        console.log(`📍 DEBUG - Within range: ${distance <= 50}`);
+        console.log(`📍 DEBUG - Quest type: ${activeQuestData.type}`);
+        
+        if (distance <= 50) {
+          console.log("🎯 SHOULD COMPLETE NOW!");
+        }
+      }
+    }
+  }, [userPosition, activeQuest, quests, calculateDistance]);
+
+  // Call debug function when position updates
+  useEffect(() => {
+    checkLocationDebug();
+  }, [userPosition, activeQuest, checkLocationDebug]);
 
   const handleQuestClick = useCallback((quest: Quest) => {
     setSelectedQuest(quest);
@@ -501,6 +572,33 @@ const CampusMap = () => {
                     <Play className="w-4 h-4 mr-2" />
                     {isQuestCompleted ? "Completed" : isQuestInProgress ? "Continue Quest" : "Start Quest"}
                   </Button>
+
+                  {/* Manual test button for location completion */}
+                  {selectedQuest && selectedQuest.type === "Location" && !userProgress.completedQuests.includes(selectedQuest.id) && (
+                    <Button 
+                      onClick={() => {
+                        if (selectedQuest && userPosition) {
+                          const distance = calculateDistance(
+                            userPosition.lat, userPosition.lng,
+                            selectedQuest.position.lat, selectedQuest.position.lng
+                          );
+                          console.log(`🧪 Manual test - Distance: ${distance.toFixed(2)}m`);
+                          
+                          const completed = completeLocationQuest(selectedQuest.id, userPosition);
+                          if (completed) {
+                            console.log("✅ Manual completion successful!");
+                            refreshQuests();
+                          } else {
+                            console.log("❌ Manual completion failed - not close enough");
+                          }
+                        }
+                      }}
+                      variant="outline"
+                      className="w-full mt-2"
+                    >
+                      🧪 Test Location Completion
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (

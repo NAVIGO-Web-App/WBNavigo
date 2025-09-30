@@ -7,7 +7,7 @@ import { MapPin, Star, Clock, Award, Play, CheckCircle, Timer } from "lucide-rea
 import Header from "@/components/Header";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useQuest } from "@/contexts/QuestContext"; // Make sure this import exists
+import { useQuest } from "@/contexts/QuestContext";
 
 const Quests = () => {
   const [selectedTab, setSelectedTab] = useState("all");
@@ -18,11 +18,17 @@ const Quests = () => {
     userProgress, 
     activeQuest, 
     canStartQuest 
-  } = useQuest(); // USE THE HOOK TO GET THESE VALUES
+  } = useQuest();
   const navigate = useNavigate();
   const { theme } = useTheme();
 
   const handleStartQuest = async (quest: any) => {
+    // 🚨 FIXED: Don't allow starting completed quests
+    if (quest.status === "Completed") {
+      console.log("Quest already completed:", quest.title);
+      return;
+    }
+
     // Check if user can start this quest
     if (!canStartQuest(quest.id)) {
       // Show requirements not met message
@@ -193,7 +199,7 @@ const Quests = () => {
                     <Card
                       key={quest.id}
                       className={`group hover:shadow-quest transition-all duration-300 transform hover:scale-[1.02] bg-card dark:bg-gray-800 dark:border-gray-700 ${
-                        hasUnmetRequirements ? "opacity-60" : ""
+                        (hasUnmetRequirements || quest.status === "Completed") ? "opacity-60" : ""
                       }`}
                     >
                       <CardHeader className="pb-4">
@@ -253,24 +259,30 @@ const Quests = () => {
                         )}
 
                         <div className="pt-2">
-                          {(quest.status === "Available" || quest.status === "In Progress") && (
+                          {/* 🚨 FIXED: Simplified button logic to avoid TypeScript errors */}
+                          {quest.status === "Completed" ? (
+                            <Button variant="success" className="w-full" disabled>
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Completed
+                            </Button>
+                          ) : (
                             <Button
                               variant={quest.status === "Available" ? "default" : "secondary"}
                               className="w-full"
                               onClick={() => handleStartQuest(quest)}
                               disabled={hasUnmetRequirements}
                             >
-                              {quest.status === "Available" ? <Play className="w-4 h-4 mr-2" /> : <Timer className="w-4 h-4 mr-2" />}
-                              {quest.status === "Available" 
-                                ? (hasUnmetRequirements ? "Requirements Needed" : "Start Quest")
-                                : "Continue Quest"
-                              }
-                            </Button>
-                          )}
-                          {quest.status === "Completed" && (
-                            <Button variant="success" className="w-full" disabled>
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Completed
+                              {quest.status === "Available" ? (
+                                <>
+                                  <Play className="w-4 h-4 mr-2" />
+                                  {hasUnmetRequirements ? "Requirements Needed" : "Start Quest"}
+                                </>
+                              ) : (
+                                <>
+                                  <Timer className="w-4 h-4 mr-2" />
+                                  Continue Quest
+                                </>
+                              )}
                             </Button>
                           )}
                         </div>
