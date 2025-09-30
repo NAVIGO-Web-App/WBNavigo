@@ -32,26 +32,50 @@ const Quests = () => {
 
   useEffect(() => {
     const fetchQuests = async () => {
-      const snapshot = await getDocs(collection(db, "quests"));
-      const data: Quest[] = snapshot.docs.map((doc) => {
-        const d = doc.data();
-        const [lat, lng] = d.building.split(",").map((x: string) => parseFloat(x));
-        return {
-          id: doc.id,
-          title: d.title,
-          description: d.description,
-          location: d.title,
-          difficulty: d.difficulty || "Medium",
-          points: d.rewardPoints,
-          type: d.type || "Location",
-          status: d.status === "active" ? "Available" : "Completed",
-          estimatedTime: d.estimatedTime || "30 min",
-          requirements: d.requirements || [],
-          position: { lat, lng },
-        };
-      });
-      setQuests(data);
+      try {
+        const snapshot = await getDocs(collection(db, "quests"));
+        const data: Quest[] = snapshot.docs.map((doc) => {
+          const d = doc.data();
+  
+          // Use Firestore lat/lng if stored as numbers
+          let lat = 0;
+          let lng = 0;
+  
+          if (d.position && typeof d.position.lat === "number" && typeof d.position.lng === "number") {
+            lat = d.position.lat;
+            lng = d.position.lng;
+          } else if (d.building && typeof d.building === "string") {
+            // fallback if "building" is a string "lat,lng"
+            const [latStr, lngStr] = d.building.split(",");
+            lat = parseFloat(latStr);
+            lng = parseFloat(lngStr);
+          }
+  
+          return {
+            id: doc.id,
+            title: d.title || "Untitled Quest",
+            description: d.description || "No description provided.",
+            location: d.location || "Unknown",
+            difficulty: (d.difficulty as Quest["difficulty"]) || "Medium",
+            points: typeof d.rewardPoints === "number" ? d.rewardPoints : 0,
+            type: (d.type as Quest["type"]) || "Location",
+            status:
+              d.status === "active"
+                ? "Available"
+                : d.status === "in-progress"
+                ? "In Progress"
+                : "Completed",
+            estimatedTime: d.estimatedTime || "30 min",
+            requirements: Array.isArray(d.requirements) ? d.requirements : [],
+            position: { lat, lng },
+          };
+        });
+        setQuests(data);
+      } catch (err) {
+        console.error("Error fetching quests:", err);
+      }
     };
+  
     fetchQuests();
   }, []);
 
