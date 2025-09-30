@@ -8,7 +8,11 @@
   -  **External API**: Google Maps APi for location verification
 
 - We are using the Agile and SCRUM Methodology.
-    
+        
+**Documentation Hosting**
+- https://navigo-documentation.netlify.app/
+- Hosted using Netlify
+  
 **Repository Structure**
 - The source codes are stored in the source folder and compiled there.
 - The main branch is used to store build files which are compiled to run static files.
