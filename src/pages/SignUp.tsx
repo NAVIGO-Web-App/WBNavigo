@@ -2,6 +2,7 @@ import React, { useState, useEffect, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { auth, db } from "../firebase";
+import Header from "@/components/Header";
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -9,12 +10,12 @@ import {
   signInWithEmailAndPassword,
   UserCredential
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { MapPin, UserPlus, LogIn } from "lucide-react";
+import { MapPin, UserPlus, LogIn, Loader } from "lucide-react";
 
 // Extend Window interface to include Google properties
 declare global {
@@ -43,11 +44,48 @@ interface GoogleCredentialResponse {
 
 function SignUpPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user, login, isLoading: authLoading } = useAuth();
   const [isRegistering, setIsRegistering] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (user && !authLoading) {
+      navigate("/map");
+    }
+  }, [user, authLoading, navigate]);
+
   const toggleForm = () => setIsRegistering(!isRegistering);
+
+  // Show loading while checking auth state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
+            <Loader className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Don't render the login page if user is authenticated (will redirect)
+  if (user) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
+            <Loader className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Redirecting to map...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -82,7 +120,7 @@ function SignUpPage() {
       });
       navigate("/map");
     } catch (error: any) {
-      toast.error(error.message, {
+      toast.error("An error occured while signing up " + error.message, {
         position: "top-center",
       });
     } finally {
@@ -101,21 +139,59 @@ function SignUpPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
+      // Get user document from Firestore to ensure it exists and get user data
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (!userDoc.exists()) {
+        // Create user document if it doesn't exist (for backward compatibility)
+        await setDoc(userDocRef, {
+          name: user.displayName || email.split('@')[0],
+          email: user.email,
+          points: 0,
+          inventory: [],
+          isAdmin: false,
+        });
+      }
+      
+      const userData = userDoc.exists() ? userDoc.data() : {
+        name: user.displayName || email.split('@')[0],
+        email: user.email,
+        points: 0,
+        inventory: [],
+        isAdmin: false,
+      };
+      
       login({
         uid: user.uid,
-        displayName: user.displayName,
+        displayName: userData.name,
         email: user.email,
-        isAdmin: false
+        isAdmin: userData.isAdmin || false
       });
       
-      toast.success("User logged in Successfully", {
+      toast.success("User logged in successfully", {
         position: "top-center",
       });
       navigate("/map");
     } catch (error: any) {
-      toast.error(error.message, {
-        position: "top-center",
-      });
+      console.error("Login error:", error);
+      
+      // More specific error messages
+      if (error.code === 'auth/invalid-credential' || 
+          error.code === 'auth/wrong-password' || 
+          error.code === 'auth/user-not-found') {
+        toast.error("Incorrect email or password", {
+          position: "top-center",
+        });
+      } else if (error.code === 'auth/too-many-requests') {
+        toast.error("Too many failed attempts. Please try again later.", {
+          position: "top-center",
+        });
+      } else {
+        toast.error("Login failed: " + error.message, {
+          position: "top-center",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -157,11 +233,16 @@ function SignUpPage() {
   };
 
   useEffect(() => {
+    // Only initialize Google Sign-In if user is not authenticated
+    if (user) return;
+
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
+
+    let intervalId: NodeJS.Timeout;
 
     const initializeGoogleSignIn = () => {
       if (window.google && window.google.accounts) {
@@ -193,31 +274,28 @@ function SignUpPage() {
     };
 
     if (!initializeGoogleSignIn()) {
-      const interval = setInterval(() => {
+      intervalId = setInterval(() => {
         if (initializeGoogleSignIn()) {
-          clearInterval(interval);
+          clearInterval(intervalId);
         }
       }, 100);
-
-      return () => clearInterval(interval);
     }
-  }, []);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      // Clean up the script if component unmounts
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, [user]); // Only re-run if user changes
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-card border-b border-border shadow-card-custom">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-hero rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold text-primary">NAVIGO</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
