@@ -13,7 +13,7 @@ interface LeaderboardEntry {
   name: string;
   email: string;
   points: number;
-  avatar?: string;
+  avatar?: string; // this will now be profilePictureUrl from Firestore
   questsCompleted?: number;
   badges?: number;
   trend?: "up" | "down" | "same";
@@ -24,19 +24,28 @@ interface LeaderboardEntry {
 const Leaderboard = () => {
   const { theme } = useTheme();
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [user] = useAuthState(auth); // get the logged-in user
+  const [user] = useAuthState(auth);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
         const usersCol = collection(db, "users");
         const snapshot = await getDocs(usersCol);
-        const users = snapshot.docs.map(doc => doc.data() as LeaderboardEntry);
+        const users = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            name: data.name,
+            email: data.email,
+            points: data.points || 0,
+            avatar: data.profilePictureUrl, // <-- use profile picture here
+            questsCompleted: data.questsCompleted,
+            badges: data.badges,
+            trend: data.trend,
+          } as LeaderboardEntry;
+        });
 
-        // Sort by points descending
         const sorted = users.sort((a, b) => b.points - a.points);
 
-        // Assign ranks and check current user
         const ranked = sorted.map((entry, index) => ({
           ...entry,
           rank: index + 1,
@@ -45,7 +54,7 @@ const Leaderboard = () => {
 
         setLeaderboardData(ranked);
       } catch (err) {
-        console.error("Error fetching users:", err);
+        console.error("Error fetching leaderboard:", err);
       }
     };
 
