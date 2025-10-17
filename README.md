@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+
+=======
 # NAVIGO - A Campus Quest Adventure
 **Project Overview**
 - NAVIGO is a location-based game for university students that encourages exploration through quests, treasure hunts and rewards. The application consists of:
@@ -104,3 +107,4 @@ Git is used for version control, allowing the team to track changes, collaborate
 - Yamkela Vutula
 - Kuhle Bikitsha
 
+>>>>>>> 11a75aa2258d3e6ed976247f71bb1cc4fb91b70d
