@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+
+=======
 # NAVIGO - A Campus Quest Adventure
 **Project Overview**
 - NAVIGO is a location-based game for university students that encourages exploration through quests, treasure hunts and rewards. The application consists of:
@@ -16,7 +19,7 @@
 **Repository Structure**
 - The source codes are stored in the source folder and compiled there.
 - The main branch is used to store build files which are compiled to run static files.
-  - Our deployment to GitHub Pages and Azure is done from main branch.
+  - Our deployment to Netlify is done from main branch.
     
 - The other branches are created by each member for their commits and changes to the main branch. This is done to ensure a clean workflow for each member.
 
@@ -104,3 +107,4 @@ Git is used for version control, allowing the team to track changes, collaborate
 - Yamkela Vutula
 - Kuhle Bikitsha
 
+>>>>>>> 11a75aa2258d3e6ed976247f71bb1cc4fb91b70d
