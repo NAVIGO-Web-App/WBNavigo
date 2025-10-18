@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, Timestamp, query, where, arrayUnion } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from "react-toastify";
 
 export interface Quest {
   id: string;
@@ -35,6 +36,17 @@ export interface ActiveQuest {
 }
 
 // Separate interfaces for Firestore data and App data
+interface Collectible {
+  id: string;
+  name: string;
+  description: string;
+  iconUrl: string;
+  rarity: string;
+  difficulty: string;
+  obtainedAt?: Date;
+  questId?: string;
+}
+
 export interface FirestoreUserProgress {
   completedQuests: string[];
   inProgressQuests: {
@@ -53,6 +65,7 @@ export interface FirestoreUserProgress {
       title: string;
     };
   };
+  collectibles?: Collectible[];
 }
 
 export interface AppUserProgress {
@@ -73,6 +86,7 @@ export interface AppUserProgress {
       title: string;
     };
   };
+  collectibles?: Collectible[];
 }
 
 interface QuestContextType {
@@ -145,6 +159,7 @@ const convertToAppUserProgress = (firestoreProgress: FirestoreUserProgress): App
     activeQuestId: firestoreProgress.activeQuestId || null,
     totalPoints: firestoreProgress.totalPoints || 0,
     completedQuestDetails: firestoreProgress.completedQuestDetails || {},
+    collectibles: firestoreProgress.collectibles || [],
     inProgressQuests: Object.fromEntries(
       Object.entries(firestoreProgress.inProgressQuests || {}).map(([questId, progress]) => [
         questId,
@@ -164,7 +179,8 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     inProgressQuests: {},
     activeQuestId: null,
     totalPoints: 0,
-    completedQuestDetails: {}
+    completedQuestDetails: {},
+    collectibles: []
   });
   const [activeQuest, setActiveQuestState] = useState<ActiveQuest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -461,6 +477,55 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           }
         }
       };
+
+      // Award collectible based on quest difficulty
+      if (quest.difficulty) {
+        try {
+          // Get all collectibles of matching difficulty
+          const collectiblesRef = collection(db, 'collectibles');
+          const q = query(collectiblesRef, where('difficulty', '==', quest.difficulty.toLowerCase()));
+          const collectiblesSnapshot = await getDocs(q);
+          
+          if (!collectiblesSnapshot.empty) {
+            // Select a random collectible from the matching difficulty
+            const collectibles = collectiblesSnapshot.docs;
+            const randomCollectible = collectibles[Math.floor(Math.random() * collectibles.length)];
+            const collectibleData = randomCollectible.data();
+            
+            // Get current user progress to check for duplicates
+            const userProgressRef = doc(db, 'userProgress', user.uid);
+            const userProgressSnap = await getDoc(userProgressRef);
+            const userData = userProgressSnap.data();
+            const existingCollectibles = userData?.collectibles || [];
+
+            // Check if user already has this collectible
+            const hasCollectible = existingCollectibles.some(
+              (c: any) => c.id === randomCollectible.id
+            );
+
+            // Only add if user doesn't have this collectible yet
+            if (!hasCollectible) {
+              await updateDoc(userProgressRef, {
+                collectibles: arrayUnion({
+                  id: randomCollectible.id,
+                  name: collectibleData.name,
+                  description: collectibleData.description,
+                  iconUrl: collectibleData.iconUrl,
+                  rarity: collectibleData.rarity,
+                  difficulty: collectibleData.difficulty
+                })
+              });
+
+              toast.success(`🏆 Awarded new collectible: ${collectibleData.name}`);
+            } else {
+              toast.info(`You already have the collectible: ${collectibleData.name}`);
+            }
+          }
+        } catch (error) {
+          toast.error('Error awarding collectible');
+          console.error('Error awarding collectible:', error);
+        }
+      }
 
       const firestoreData = convertToFirestoreData(updatedProgress);
       await updateDoc(doc(db, 'userProgress', user.uid), firestoreData);
