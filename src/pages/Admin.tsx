@@ -57,6 +57,7 @@ interface CollectibleFormData {
   description: string;
   iconUrl: string;
   rarity: "common" | "rare" | "epic" | "legendary";
+  difficulty: "easy" | "medium" | "hard";
 }
 
 interface Quest {
@@ -81,6 +82,7 @@ interface Collectible {
   description: string;
   iconUrl: string;
   rarity: string;
+  difficulty: string;
 }
 
 //
@@ -531,6 +533,7 @@ const collectibleSchema = z.object({
     .min(10, "Description must be at least 10 characters"),
   iconUrl: z.string().url("Must be a valid URL"),
   rarity: z.enum(["common", "rare", "epic", "legendary"]),
+  difficulty: z.enum(["easy", "medium", "hard"]),
 });
 
 // 🚨 ADDED: Proper TypeScript props interface
@@ -554,6 +557,7 @@ const CollectibleForm: React.FC<CollectibleFormProps> = ({
       description: "",
       iconUrl: "",
       rarity: "common",
+      difficulty: "easy",
     },
   });
 
@@ -565,6 +569,7 @@ const CollectibleForm: React.FC<CollectibleFormProps> = ({
         description: editingCollectible.description,
         iconUrl: editingCollectible.iconUrl,
         rarity: (editingCollectible.rarity.toLowerCase() as "common" | "rare" | "epic" | "legendary") || "common",
+        difficulty: (editingCollectible.difficulty.toLowerCase() as "easy" | "medium" | "hard") || "easy",
       };
       form.reset(formData);
     } else {
@@ -573,6 +578,7 @@ const CollectibleForm: React.FC<CollectibleFormProps> = ({
         description: "",
         iconUrl: "",
         rarity: "common",
+        difficulty: "easy",
       });
     }
   }, [editingCollectible, form]);
@@ -668,6 +674,31 @@ const CollectibleForm: React.FC<CollectibleFormProps> = ({
                 </FormItem>
               )}
             />
+            <FormField
+                name="difficulty"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Difficulty</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select difficulty" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <div className="flex gap-4">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
