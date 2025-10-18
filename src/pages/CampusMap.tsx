@@ -234,6 +234,7 @@ const CampusMap = () => {
   }, [selectedQuest, userPosition, lastDirectionPosition, isSignificantMovement, calculateDirections, positionUpdateCount, isLoaded]);
 
   // Handle quest completion with quiz support
+  // Handle quest completion with quiz support
   useEffect(() => {
     if (!userPosition || !activeQuest) return;
 
@@ -241,24 +242,29 @@ const CampusMap = () => {
     if (!activeQuestData) return;
 
     // Complete ALL quest types when user reaches location (including quiz quests)
+    // Complete all quest types when user reaches location (including quiz quests)
     if (activeQuestData.type === "Location" || activeQuestData.type === "Quiz") {
       if (userProgress.completedQuests.includes(activeQuest.questId)) return;
 
-    const isAtLocation = completeLocationQuest(activeQuest.questId, userPosition);
-    
-    if (isAtLocation) {
-      //console.log(`🎉 Success! Completed location quest: ${activeQuestData.title}`);
-      alert(`🎉 Quest Completed! You've reached ${activeQuestData.title}`);
-      async function rewardCollectible(userId: string, questId: string, collectible: any) {
-      const collectibleRef = doc(db, "users", userId, "collectibles", collectible.id);
-      await setDoc(collectibleRef, {
-        ...collectible,
-        obtainedAt: new Date(),
-      });
+      const isAtLocation = completeLocationQuest(activeQuest.questId, userPosition);
+
+      if (isAtLocation) {
+        alert(`🎉 Quest Completed! You've reached ${activeQuestData.title}`);
+
+        // Arrow function expression (safe inside block)
+        const rewardCollectible = async (userId: string, questId: string, collectible: any) => {
+          const collectibleRef = doc(db, "users", userId, "collectibles", collectible.id);
+          await setDoc(collectibleRef, {
+            ...collectible,
+            obtainedAt: new Date(),
+          });
+        };
+
+        refreshQuests();
       }
-      refreshQuests();
     }
   }, [userPosition, activeQuest, quests, completeLocationQuest, refreshQuests, userProgress.completedQuests]);
+
 
   // Debug function for location detection
   const checkLocationDebug = useCallback(() => {
