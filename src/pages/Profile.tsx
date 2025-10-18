@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { collection, doc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, getDoc, orderBy, query, updateDoc } from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -99,15 +99,10 @@ const Profile = () => {
         setUserDocId(userDoc.id);
         const data = userDoc.data() as UserProfile;
 
-        // Collectibles query
-        const collectiblesCol = collection(db, "users", userDoc.id, "collectibles");
-        const collectiblesQuery = query(collectiblesCol, orderBy("createdAt", "asc"));
-        const collectiblesSnap = await getDocs(collectiblesQuery);
-
-        const collectiblesData: Collectible[] = collectiblesSnap.docs.map((c) => ({
-          id: c.id,
-          ...(c.data() as Collectible),
-        }));
+        // Fetch user progress to get collectibles
+        const userProgressDoc = await getDoc(doc(db, 'userProgress', user.uid));
+        const userProgress = userProgressDoc.data();
+        const userCollectibles = userProgress?.collectibles || [];
 
         // Compute rank based on points
         const allUsers = snapshot.docs.map((doc) => doc.data() as UserProfile);
@@ -120,7 +115,7 @@ const Profile = () => {
         // Milestone check
         if (milestones.includes(data.points)) setMilestoneHit(true);
 
-        setProfile({ ...data, collectibles: collectiblesData, rank, level });
+        setProfile({ ...data, collectibles: userCollectibles, rank, level });
       } catch (err) {
         console.error("Error loading profile:", err);
       } finally {
@@ -328,15 +323,23 @@ const Profile = () => {
 
           <TabsContent value="inventory">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {profile.inventory?.map((item, idx) => (
-                <Card key={idx} className="bg-card dark:bg-gray-800 shadow-card-custom text-center">
+              {profile.collectibles?.map((collectible) => (
+                <Card key={collectible.id} className="bg-card dark:bg-gray-800 shadow-card-custom">
+                  <CardHeader className="pb-4 flex justify-between items-start">
+                    <img src={collectible.iconUrl} alt={collectible.name} className="w-12 h-12" />
+                    <Badge className={getRarityColor(collectible.rarity)}>{collectible.rarity}</Badge>
+                  </CardHeader>
                   <CardContent>
-                    <img src={item.iconUrl} alt={item.name} className="w-8 h-8 mx-auto mb-2" />
-                    <CardTitle className="text-lg dark:text-white">{item.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground dark:text-gray-300">{item.description}</p>
+                    <CardTitle className="text-lg dark:text-white mb-2">{collectible.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground dark:text-gray-300">{collectible.description}</p>
                   </CardContent>
                 </Card>
               ))}
+              {(!profile.collectibles || profile.collectibles.length === 0) && (
+                <div className="col-span-full text-center text-muted-foreground dark:text-gray-400 py-8">
+                  No collectibles yet. Complete quests to earn collectibles!
+                </div>
+              )}
             </div>
           </TabsContent>
 
