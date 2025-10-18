@@ -38,9 +38,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MapPin } from "lucide-react";
+import { MapPin, Plus, Trash2, HelpCircle } from "lucide-react";
 
-// 🚨 ADDED: TypeScript interfaces for better type safety
+// 🚨 ENHANCED: Updated interfaces for Quiz Quests
 interface QuestFormData {
   title: string;
   description: string;
@@ -48,8 +48,22 @@ interface QuestFormData {
   difficulty: "easy" | "medium" | "hard";
   lat: number;
   lng: number;
-  type: "qr" | "location" | "quiz";
+  type: "qr" | "location" | "quiz" | "timed" | "multiplayer";
   location?: string;
+  // NEW: Quiz-specific fields
+  passingScore?: number;
+  allowRetries?: boolean;
+  shuffleQuestions?: boolean;
+  quizQuestions?: QuizQuestion[];
+}
+
+interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+  points?: number;
 }
 
 interface CollectibleFormData {
@@ -64,7 +78,7 @@ interface Quest {
   title: string;
   description: string;
   points: number;
-  difficulty: string; // 🚨 FIXED: This can be string from Firestore
+  difficulty: string;
   type: string;
   location?: string;
   position?: {
@@ -73,6 +87,11 @@ interface Quest {
   };
   lat?: number;
   lng?: number;
+  // NEW: Quiz fields
+  passingScore?: number;
+  allowRetries?: boolean;
+  shuffleQuestions?: boolean;
+  quizQuestions?: QuizQuestion[];
 }
 
 interface Collectible {
@@ -86,6 +105,7 @@ interface Collectible {
 //
 // ──────────────────────────────── QUESTS ────────────────────────────────
 //
+// 🚨 ENHANCED: Updated schema for Quiz Quests
 const questSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(5, "Description must be at least 5 characters"),
@@ -93,7 +113,19 @@ const questSchema = z.object({
   difficulty: z.enum(["easy", "medium", "hard"]),
   lat: z.coerce.number().min(-90).max(90, "Latitude must be between -90 and 90"),
   lng: z.coerce.number().min(-180).max(180, "Longitude must be between -180 and 180"),
-  type: z.enum(["qr", "location", "quiz"]).default("location"),
+  type: z.enum(["qr", "location", "quiz", "timed", "multiplayer"]).default("location"),
+  // NEW: Quiz validation
+  passingScore: z.coerce.number().min(0).max(100).optional().default(70),
+  allowRetries: z.boolean().optional().default(true),
+  shuffleQuestions: z.boolean().optional().default(false),
+  quizQuestions: z.array(z.object({
+    id: z.string(),
+    question: z.string().min(1, "Question is required"),
+    options: z.array(z.string().min(1, "Option cannot be empty")).length(4, "Exactly 4 options required"),
+    correctAnswer: z.coerce.number().min(0).max(3, "Correct answer must be between 0-3"),
+    explanation: z.string().optional(),
+    points: z.coerce.number().min(1).optional().default(1)
+  })).optional().default([])
 });
 
 // 🚨 ADDED: Proper TypeScript props interface
@@ -103,6 +135,95 @@ interface QuestFormProps {
   onCancel: () => void;
   isSubmitting?: boolean;
 }
+
+// 🚨 NEW: Quiz Question Component
+const QuizQuestionForm: React.FC<{
+  question: QuizQuestion;
+  index: number;
+  onUpdate: (index: number, question: QuizQuestion) => void;
+  onRemove: (index: number) => void;
+}> = ({ question, index, onUpdate, onRemove }) => {
+  const updateField = (field: keyof QuizQuestion, value: any) => {
+    onUpdate(index, { ...question, [field]: value });
+  };
+
+  const updateOption = (optionIndex: number, value: string) => {
+    const newOptions = [...question.options];
+    newOptions[optionIndex] = value;
+    updateField('options', newOptions);
+  };
+
+  return (
+    <Card className="p-4 border border-blue-200 bg-blue-50/50 dark:bg-blue-900/20 dark:border-blue-800">
+      <div className="flex justify-between items-center mb-4">
+        <h4 className="font-semibold">Question {index + 1}</h4>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onRemove(index)}
+          className="text-destructive"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium">Question</label>
+          <Input
+            value={question.question}
+            onChange={(e) => updateField('question', e.target.value)}
+            placeholder="Enter the question..."
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Options</label>
+          <div className="space-y-2">
+            {question.options.map((option, optionIndex) => (
+              <div key={optionIndex} className="flex items-center gap-2">
+                <Input
+                  value={option}
+                  onChange={(e) => updateOption(optionIndex, e.target.value)}
+                  placeholder={`Option ${optionIndex + 1}`}
+                  className={optionIndex === question.correctAnswer ? "border-green-500" : ""}
+                />
+                <Button
+                  type="button"
+                  variant={optionIndex === question.correctAnswer ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => updateField('correctAnswer', optionIndex)}
+                >
+                  Correct
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Explanation (Optional)</label>
+          <Input
+            value={question.explanation || ""}
+            onChange={(e) => updateField('explanation', e.target.value)}
+            placeholder="Explanation shown after answering..."
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Points for this question</label>
+          <Input
+            type="number"
+            value={question.points || 1}
+            onChange={(e) => updateField('points', parseInt(e.target.value) || 1)}
+            min="1"
+          />
+        </div>
+      </div>
+    </Card>
+  );
+};
 
 const QuestForm: React.FC<QuestFormProps> = ({
   onSubmit,
@@ -118,16 +239,21 @@ const QuestForm: React.FC<QuestFormProps> = ({
       points: 10,
       difficulty: "easy",
       location: "",
-      lat: -26.1915, // Default to your campus center
+      lat: -26.1915,
       lng: 28.0309,
       type: "location",
+      passingScore: 70,
+      allowRetries: true,
+      shuffleQuestions: false,
+      quizQuestions: []
     },
   });
 
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+
   useEffect(() => {
     if (editingQuest) {
-      // 🚨 FIXED: Handle both nested position object and flat lat/lng fields consistently
-      // 🚨 FIXED: Type conversion for difficulty field
+      // Handle both nested position object and flat lat/lng fields consistently
       let questData: QuestFormData;
       
       // Convert string difficulty to the specific union type
@@ -143,7 +269,11 @@ const QuestForm: React.FC<QuestFormProps> = ({
           location: editingQuest.location || "",
           lat: editingQuest.position.lat,
           lng: editingQuest.position.lng,
-          type: (editingQuest.type as "qr" | "location" | "quiz") || "location",
+          type: (editingQuest.type as "qr" | "location" | "quiz" | "timed" | "multiplayer") || "location",
+          passingScore: editingQuest.passingScore || 70,
+          allowRetries: editingQuest.allowRetries !== undefined ? editingQuest.allowRetries : true,
+          shuffleQuestions: editingQuest.shuffleQuestions !== undefined ? editingQuest.shuffleQuestions : false,
+          quizQuestions: editingQuest.quizQuestions || []
         };
       } else {
         // Has flat lat/lng
@@ -155,11 +285,16 @@ const QuestForm: React.FC<QuestFormProps> = ({
           location: editingQuest.location || "",
           lat: editingQuest.lat || -26.1915,
           lng: editingQuest.lng || 28.0309,
-          type: (editingQuest.type as "qr" | "location" | "quiz") || "location",
+          type: (editingQuest.type as "qr" | "location" | "quiz" | "timed" | "multiplayer") || "location",
+          passingScore: editingQuest.passingScore || 70,
+          allowRetries: editingQuest.allowRetries !== undefined ? editingQuest.allowRetries : true,
+          shuffleQuestions: editingQuest.shuffleQuestions !== undefined ? editingQuest.shuffleQuestions : false,
+          quizQuestions: editingQuest.quizQuestions || []
         };
       }
       
       form.reset(questData);
+      setQuizQuestions(editingQuest.quizQuestions || []);
     } else {
       form.reset({
         title: "",
@@ -170,16 +305,18 @@ const QuestForm: React.FC<QuestFormProps> = ({
         lat: -26.1915,
         lng: 28.0309,
         type: "location",
+        passingScore: 70,
+        allowRetries: true,
+        shuffleQuestions: false,
+        quizQuestions: []
       });
+      setQuizQuestions([]);
     }
   }, [editingQuest, form]);
 
   // Function to handle coordinate picking from Google Maps
   const handlePickCoordinates = () => {
-    // Open Google Maps in a new tab
     window.open('https://www.google.com/maps', '_blank');
-    
-    // Show instructions to the user
     alert(`How to get coordinates:
 1. Google Maps will open in a new tab
 2. Right-click on any location on the map
@@ -190,7 +327,7 @@ const QuestForm: React.FC<QuestFormProps> = ({
 Format: latitude,longitude (e.g., -26.19045,28.02629)`);
   };
 
-  // Function to handle coordinate string input (e.g., "-26.19045,28.02629")
+  // Function to handle coordinate string input
   const handleCoordinateInput = (coordinateString: string) => {
     if (!coordinateString) return;
     
@@ -208,8 +345,33 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
     }
   };
 
+  // NEW: Quiz Question Management
+  const addQuizQuestion = () => {
+    const newQuestion: QuizQuestion = {
+      id: Date.now().toString(),
+      question: "",
+      options: ["", "", "", ""],
+      correctAnswer: 0,
+      explanation: "",
+      points: 1
+    };
+    setQuizQuestions(prev => [...prev, newQuestion]);
+  };
+
+  const updateQuizQuestion = (index: number, question: QuizQuestion) => {
+    setQuizQuestions(prev => {
+      const newQuestions = [...prev];
+      newQuestions[index] = question;
+      return newQuestions;
+    });
+  };
+
+  const removeQuizQuestion = (index: number) => {
+    setQuizQuestions(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (data: QuestFormData) => {
-    // 🚨 FIXED: Always use nested position structure for consistency
+    // Prepare quest data with quiz questions
     const questData = {
       title: data.title,
       description: data.description,
@@ -217,24 +379,32 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
       difficulty: data.difficulty,
       location: data.location || "Campus Location",
       type: data.type,
-      position: { // ✅ Always use nested position for consistency
+      position: {
         lat: data.lat,
         lng: data.lng,
       },
       estimatedTime: "30 min",
       requirements: [],
-      status: "active", // This is important for initial status
+      status: "active",
       createdAt: new Date(),
+      // 🚨 FIX: Use 'quizQuestions' for Firestore compatibility
+      quizQuestions: data.type === "quiz" ? quizQuestions : [],
+      passingScore: data.passingScore,
+      allowRetries: data.allowRetries,
+      shuffleQuestions: data.shuffleQuestions,
     };
 
     const success = await onSubmit(questData);
     if (success && !editingQuest) {
       form.reset();
+      setQuizQuestions([]);
     }
   };
 
+  const questType = form.watch("type");
+
   return (
-    <Card className="w-full max-w-2xl shadow-lg bg-gradient-to-br from-card to-card/80 border border-primary/20">
+    <Card className="w-full max-w-4xl shadow-lg bg-gradient-to-br from-card to-card/80 border border-primary/20">
       <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-t-lg">
         <CardTitle>
           {editingQuest ? "Edit Quest" : "Create Quest"}
@@ -336,6 +506,8 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
                       <SelectItem value="qr">QR Code</SelectItem>
                       <SelectItem value="location">Location</SelectItem>
                       <SelectItem value="quiz">Quiz</SelectItem>
+                      <SelectItem value="timed">Timed</SelectItem>
+                      <SelectItem value="multiplayer">Multiplayer</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -343,7 +515,115 @@ Format: latitude,longitude (e.g., -26.19045,28.02629)`);
               )}
             />
 
-            {/* Enhanced Coordinates Section with Google Maps Picker */}
+            {/* Quiz Settings - Only show for quiz type */}
+            {questType === "quiz" && (
+              <div className="space-y-4 p-4 border border-blue-200 rounded-lg bg-blue-50/50 dark:bg-blue-900/20">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5" />
+                  Quiz Settings
+                </h3>
+                
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    name="passingScore"
+                    control={form.control}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Passing Score (%)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" max="100" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    name="allowRetries"
+                    control={form.control}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Allow Retries</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "true")}
+                          defaultValue={field.value ? "true" : "false"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Allow retries" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="true">Yes</SelectItem>
+                            <SelectItem value="false">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    name="shuffleQuestions"
+                    control={form.control}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Shuffle Questions</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "true")}
+                          defaultValue={field.value ? "true" : "false"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Shuffle questions" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="true">Yes</SelectItem>
+                            <SelectItem value="false">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Quiz Questions Management */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-semibold">Quiz Questions</h4>
+                    <Button
+                      type="button"
+                      onClick={addQuizQuestion}
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Question
+                    </Button>
+                  </div>
+
+                  {quizQuestions.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No questions added yet. Click "Add Question" to start.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {quizQuestions.map((question, index) => (
+                        <QuizQuestionForm
+                          key={question.id}
+                          question={question}
+                          index={index}
+                          onUpdate={updateQuizQuestion}
+                          onRemove={removeQuizQuestion}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Enhanced Coordinates Section */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <FormLabel className="text-base">Location Coordinates</FormLabel>
@@ -475,7 +755,7 @@ interface QuestCardProps {
 }
 
 const QuestCard: React.FC<QuestCardProps> = ({ quest, onEdit, onDelete }) => {
-  // 🚨 FIXED: Handle both nested position and flat position data consistently
+  // Handle both nested position and flat position data consistently
   const position = quest.position || { lat: quest.lat, lng: quest.lng };
   const location = quest.location || "No location set";
   
@@ -484,9 +764,16 @@ const QuestCard: React.FC<QuestCardProps> = ({ quest, onEdit, onDelete }) => {
       <CardHeader>
         <CardTitle className="flex justify-between items-start">
           <span>{quest.title}</span>
-          <span className="text-xs font-normal bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded">
-            {quest.type || "location"}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-xs font-normal bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded">
+              {quest.type || "location"}
+            </span>
+            {quest.type === "quiz" && quest.quizQuestions && (
+              <span className="text-xs text-muted-foreground">
+                {quest.quizQuestions.length} questions
+              </span>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -497,6 +784,9 @@ const QuestCard: React.FC<QuestCardProps> = ({ quest, onEdit, onDelete }) => {
           <p><strong>Points:</strong> {quest.points}</p>
           <p><strong>Difficulty:</strong> {quest.difficulty}</p>
           <p><strong>Location:</strong> {location}</p>
+          {quest.type === "quiz" && (
+            <p><strong>Passing Score:</strong> {quest.passingScore || 70}%</p>
+          )}
           {position && position.lat && (
             <p className="text-xs text-muted-foreground">
               <strong>Coordinates:</strong> {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
@@ -520,6 +810,8 @@ const QuestCard: React.FC<QuestCardProps> = ({ quest, onEdit, onDelete }) => {
     </Card>
   );
 };
+
+// ... [Rest of the file remains the same - Collectibles section and hooks]
 
 //
 // ──────────────────────────────── COLLECTIBLES ────────────────────────────────
