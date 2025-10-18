@@ -3,30 +3,18 @@ import { doc, getDoc, setDoc, updateDoc, collection, getDocs, Timestamp, query, 
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from "react-toastify";
+// IMPORT FROM SHARED TYPES
+import { 
+  Quest, 
+  QuizQuestion, 
+  QuizProgress, 
+  QuizResults, 
+  QuestType, 
+  QuestStatus, 
+  QuestDifficulty 
+} from '@/types/quest';
 
-export interface Quest {
-  id: string;
-  title: string;
-  description: string;
-  location: string;
-  difficulty: "Easy" | "Medium" | "Hard";
-  points: number;
-  type: "Location" | "Treasure" | "Challenge";
-  status: "Available" | "In Progress" | "Completed";
-  estimatedTime: string;
-  requirements?: string[];
-  position: { lat: number; lng: number };
-  quizQuestions?: QuizQuestion[];
-  requiredQuests?: string[];
-}
-
-export interface QuizQuestion {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-}
-
+// KEEP ONLY the context-specific interfaces
 export interface ActiveQuest {
   questId: string;
   startedAt: Date;
@@ -53,6 +41,7 @@ export interface FirestoreUserProgress {
     [questId: string]: {
       startedAt: Timestamp | Date;
       quizAnswers?: number[];
+      quizProgress?: QuizProgress;
       paused?: boolean;
     };
   };
@@ -66,6 +55,9 @@ export interface FirestoreUserProgress {
     };
   };
   collectibles?: Collectible[];
+  quizProgress?: {
+    [questId: string]: QuizProgress;
+  };
 }
 
 export interface AppUserProgress {
@@ -74,7 +66,11 @@ export interface AppUserProgress {
     [questId: string]: {
       startedAt: Date;
       quizAnswers?: number[];
+      quizProgress?: QuizProgress;
       paused?: boolean;
+      // 🚨 NEW: Track location and quiz completion separately
+      locationCompleted?: boolean;
+      quizCompleted?: boolean;
     };
   };
   activeQuestId?: string | null;
@@ -87,6 +83,9 @@ export interface AppUserProgress {
     };
   };
   collectibles?: Collectible[];
+  quizProgress?: {
+    [questId: string]: QuizProgress;
+  };
 }
 
 interface QuestContextType {
@@ -94,7 +93,7 @@ interface QuestContextType {
   userProgress: AppUserProgress;
   activeQuest: ActiveQuest | null;
   loading: boolean;
-  startQuest: (questId: string) => Promise<boolean>;
+  startQuest: (questId: string) => Promise<{ success: boolean; action: 'map' | 'quiz' | 'none' }>; // 🚨 Updated return type
   setActiveQuest: (questId: string | null) => Promise<void>;
   completeQuest: (questId: string) => Promise<void>;
   completeLocationQuest: (questId: string, userPosition: { lat: number; lng: number }) => boolean;
@@ -104,6 +103,17 @@ interface QuestContextType {
   checkAbandonment: () => boolean;
   updateLastActivity: () => void;
   calculateTotalPoints: () => number;
+  quizProgress?: {
+    [questId: string]: QuizProgress;
+  };
+  
+  // QUIZ METHODS
+  startQuiz: (questId: string) => void;
+  submitQuizAnswer: (questId: string, questionIndex: number, answerIndex: number) => void;
+  completeQuiz: (questId: string) => Promise<boolean>;
+  resetQuiz: (questId: string) => void;
+  getQuizResults: (questId: string) => QuizResults | null;
+  activeQuiz: string | null;
 }
 
 const QuestContext = createContext<QuestContextType | undefined>(undefined);
@@ -160,6 +170,7 @@ const convertToAppUserProgress = (firestoreProgress: FirestoreUserProgress): App
     totalPoints: firestoreProgress.totalPoints || 0,
     completedQuestDetails: firestoreProgress.completedQuestDetails || {},
     collectibles: firestoreProgress.collectibles || [],
+    quizProgress: firestoreProgress.quizProgress || {},
     inProgressQuests: Object.fromEntries(
       Object.entries(firestoreProgress.inProgressQuests || {}).map(([questId, progress]) => [
         questId,
@@ -180,9 +191,11 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     activeQuestId: null,
     totalPoints: 0,
     completedQuestDetails: {},
-    collectibles: []
+    collectibles: [],
+    quizProgress: {}
   });
   const [activeQuest, setActiveQuestState] = useState<ActiveQuest | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
@@ -205,30 +218,17 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const calculateTotalPoints = useCallback((): number => {
     return userProgress.completedQuests.reduce((total, questId) => {
       const quest = quests.find(q => q.id === questId);
-      return total + (quest?.points || 0);
+      return total + (quest?.rewardPoints || quest?.points || 0);
     }, 0);
   }, [userProgress.completedQuests, quests]);
-
-  // 🚨 CORRECT FIX: Calculate quest status based ONLY on user progress
-  const calculateQuestStatus = useCallback((questId: string, currentUserProgress: AppUserProgress): "Available" | "In Progress" | "Completed" => {
-    if (currentUserProgress.completedQuests.includes(questId)) {
-      return "Completed";
-    }
-    if (currentUserProgress.inProgressQuests[questId]) {
-      return "In Progress";
-    }
-    return "Available";
-  }, []);
 
   const parseQuestData = (doc: any, data: any, currentUserProgress: AppUserProgress): Quest => {
     // Handle both nested position and flat position data
     let position = { lat: -26.1915, lng: 28.0309 }; // Default center
     
     if (data.position) {
-      // Has nested position object
       position = data.position;
     } else if (data.lat !== undefined && data.lng !== undefined) {
-      // Has flat lat/lng fields (from admin)
       position = { lat: data.lat, lng: data.lng };
     }
     
@@ -236,24 +236,48 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const capitalizeFirst = (str: string) => 
       str ? str.charAt(0).toUpperCase() + str.slice(1) : "Unknown";
 
-    // 🚨 CORRECT: Calculate status based on current user progress
-    const status = calculateQuestStatus(doc.id, currentUserProgress);
+    // Calculate status
+    let status: QuestStatus = "active";
+    const locationCompleted = currentUserProgress.inProgressQuests[doc.id]?.locationCompleted;
+    
+    if (currentUserProgress.completedQuests.includes(doc.id)) {
+      status = "completed";
+    } else if (locationCompleted && data.questions && data.questions.length > 0) {
+      // 🚨 NEW: Location completed but quiz not taken yet
+      status = "in-progress";
+    } else if (currentUserProgress.inProgressQuests[doc.id]) {
+      status = "in-progress";
+    }
+    
 
-    return {
+    // 🚨 FIX: Handle both 'quizQuestions' and 'questions' field names
+    const questions = data.questions || data.quizQuestions || [];
+
+    // Build the quest object with ALL required properties
+    const quest: Quest = {
       id: doc.id,
       title: data.title || "Untitled Quest",
       description: data.description || "",
-      location: data.location || "Unknown Location",
-      difficulty: capitalizeFirst(data.difficulty) as "Easy" | "Medium" | "Hard" || "Medium",
-      points: data.points || 0,
-      type: capitalizeFirst(data.type) as "Location" | "Treasure" | "Challenge" || "Location",
+      building: data.building || "Unknown Building",
+      rewardPoints: data.rewardPoints || data.points || 0,
       status: status,
+      createdAt: data.createdAt || new Date(),
+      updatedAt: data.updatedAt || new Date(),
+      type: capitalizeFirst(data.type) as QuestType || "Location",
+      difficulty: capitalizeFirst(data.difficulty) as QuestDifficulty || "Medium",
       estimatedTime: data.estimatedTime || "30 min",
+      location: data.location || "Unknown Location",
       requirements: data.requirements || [],
+      requiredQuests: data.requiredQuests || [],
       position: position,
-      quizQuestions: data.quizQuestions || [],
-      requiredQuests: data.requiredQuests || []
+      questions: questions, // 🚨 Now handles both field names
+      passingScore: data.passingScore || 70,
+      allowRetries: data.allowRetries !== undefined ? data.allowRetries : true,
+      shuffleQuestions: data.shuffleQuestions !== undefined ? data.shuffleQuestions : false,
+      points: data.points || data.rewardPoints || 0
     };
+
+    return quest;
   };
 
   const canStartQuest = (questId: string): boolean => {
@@ -275,6 +299,161 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return true;
   };
 
+  // Quiz Methods
+  const startQuiz = (questId: string) => {
+    console.log('startQuiz called for:', questId);
+    
+    const quest = quests.find(q => q.id === questId);
+    const questions = quest?.questions || (quest as any)?.quizQuestions || [];
+    
+    if (questions.length === 0) {
+      console.error('No questions found for quiz:', questId);
+      return;
+    }
+
+    const newProgress: QuizProgress = {
+      questId,
+      currentQuestion: 0,
+      answers: new Array(questions.length).fill(-1),
+      score: 0,
+      completed: false,
+      startedAt: new Date(),
+      timeSpent: 0
+    };
+
+    console.log('Creating quiz progress:', newProgress);
+
+    setUserProgress(prev => ({
+      ...prev,
+      quizProgress: {
+        ...prev.quizProgress,
+        [questId]: newProgress
+      }
+    }));
+    
+    setActiveQuiz(questId);
+    console.log('Quiz started successfully for:', questId);
+  };
+
+  const submitQuizAnswer = (questId: string, questionIndex: number, answerIndex: number) => {
+    setUserProgress(prev => {
+      const progress = prev.quizProgress?.[questId];
+      if (!progress || progress.completed) return prev;
+
+      const newAnswers = [...progress.answers];
+      newAnswers[questionIndex] = answerIndex;
+
+      // Calculate new score
+      const quest = quests.find(q => q.id === questId);
+      let newScore = 0;
+      if (quest?.questions) {
+        quest.questions.forEach((question, idx) => {
+          if (newAnswers[idx] === question.correctAnswer) {
+            newScore += question.points || 1;
+          }
+        });
+      }
+
+      // 🚨 FIX: Only advance to next question if it exists
+      const questions = quest?.questions || [];
+      const nextQuestionIndex = questionIndex + 1;
+      const shouldAdvance = nextQuestionIndex < questions.length;
+
+      const newProgress: QuizProgress = {
+        ...progress,
+        answers: newAnswers,
+        score: newScore,
+        // 🚨 FIX: Don't advance beyond last question
+        currentQuestion: shouldAdvance ? nextQuestionIndex : questionIndex,
+        timeSpent: Math.floor((Date.now() - progress.startedAt.getTime()) / 1000)
+      };
+
+      return {
+        ...prev,
+        quizProgress: {
+          ...prev.quizProgress,
+          [questId]: newProgress
+        }
+      };
+    });
+  };
+
+  const completeQuiz = async (questId: string): Promise<boolean> => {
+    const progress = userProgress.quizProgress?.[questId];
+    const quest = quests.find(q => q.id === questId);
+    
+    if (!progress || !quest?.questions) return false;
+
+    const totalQuestions = quest.questions.length;
+    const correctAnswers = progress.answers.reduce((count, answer, index) => {
+      return count + (answer === quest.questions![index].correctAnswer ? 1 : 0);
+    }, 0);
+    
+    const scorePercentage = (correctAnswers / totalQuestions) * 100;
+    const passingScore = quest.passingScore || 70;
+    const passed = scorePercentage >= passingScore;
+
+    // Update progress as completed
+    setUserProgress(prev => ({
+      ...prev,
+      quizProgress: {
+        ...prev.quizProgress,
+        [questId]: {
+          ...prev.quizProgress![questId],
+          completed: true,
+          score: scorePercentage,
+          timeSpent: Math.floor((Date.now() - progress.startedAt.getTime()) / 1000)
+        }
+      }
+    }));
+
+    setActiveQuiz(null);
+
+    // If passed, complete the quest (both location and quiz requirements are met)
+    if (passed) {
+      await completeQuest(questId);
+      return true;
+    }
+
+    return false;
+  };
+
+  const resetQuiz = (questId: string) => {
+    setUserProgress(prev => {
+      const newQuizProgress = { ...prev.quizProgress };
+      delete newQuizProgress[questId];
+      
+      return {
+        ...prev,
+        quizProgress: newQuizProgress
+      };
+    });
+    setActiveQuiz(null);
+  };
+
+  const getQuizResults = (questId: string): QuizResults | null => {
+    const progress = userProgress.quizProgress?.[questId];
+    const quest = quests.find(q => q.id === questId);
+    
+    if (!progress || !quest?.questions) return null;
+
+    const totalQuestions = quest.questions.length;
+    const correctAnswers = progress.answers.reduce((count, answer, index) => {
+      return count + (answer === quest.questions![index].correctAnswer ? 1 : 0);
+    }, 0);
+    
+    const scorePercentage = (correctAnswers / totalQuestions) * 100;
+    const passingScore = quest.passingScore || 70;
+
+    return {
+      score: scorePercentage,
+      totalQuestions,
+      correctAnswers,
+      timeSpent: progress.timeSpent,
+      passed: scorePercentage >= passingScore
+    };
+  };
+
   const refreshQuests = async () => {
     try {
       setLoading(true);
@@ -285,7 +464,8 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         inProgressQuests: {},
         activeQuestId: null,
         totalPoints: 0,
-        completedQuestDetails: {}
+        completedQuestDetails: {},
+        quizProgress: {}
       };
 
       if (user) {
@@ -296,7 +476,6 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           
           // Calculate points if not present in Firestore
           if (userProgressData.totalPoints === undefined || userProgressData.totalPoints === null) {
-            // We'll calculate this after we load quests
             userProgressData.totalPoints = 0;
           }
           
@@ -318,7 +497,8 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             inProgressQuests: {},
             activeQuestId: null,
             totalPoints: 0,
-            completedQuestDetails: {}
+            completedQuestDetails: {},
+            quizProgress: {}
           };
           await setDoc(doc(db, 'userProgress', user.uid), initialProgress);
           setUserProgress(initialProgress);
@@ -335,11 +515,26 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return parseQuestData(doc, data, userProgressData);
       });
 
+      // 🚨 FIX: Ensure quest statuses are properly set based on user progress
+      const updatedQuests = questsData.map(quest => {
+        // If quest is in completedQuests, ensure status is "completed"
+        if (userProgressData.completedQuests.includes(quest.id)) {
+          return { ...quest, status: "completed" as QuestStatus };
+        }
+        // If quest is in inProgressQuests, ensure status is "in-progress"
+        if (userProgressData.inProgressQuests[quest.id]) {
+          return { ...quest, status: "in-progress" as QuestStatus };
+        }
+        return quest;
+      });
+
+      setQuests(updatedQuests);
+
       // Calculate total points based on completed quests
       if (userProgressData.totalPoints === 0) {
         const calculatedPoints = userProgressData.completedQuests.reduce((total, questId) => {
-          const quest = questsData.find(q => q.id === questId);
-          return total + (quest?.points || 0);
+          const quest = updatedQuests.find(q => q.id === questId);
+          return total + (quest?.rewardPoints || quest?.points || 0);
         }, 0);
         userProgressData.totalPoints = calculatedPoints;
         
@@ -351,13 +546,10 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
         setUserProgress(userProgressData);
       }
-      
-      setQuests(questsData);
 
       console.log("💰 Points Summary:");
       console.log("- Completed quests:", userProgressData.completedQuests.length);
       console.log("- Current total points:", userProgressData.totalPoints);
-      console.log("- Quest statuses:", questsData.map(q => `${q.title}: ${q.status}`));
       
     } catch (error) {
       console.error('Error fetching quests:', error);
@@ -421,7 +613,7 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         // Update local quests state
         const updatedQuests = quests.map(q => 
-          q.id === questId ? { ...q, status: "In Progress" as const } : q
+          q.id === questId ? { ...q, status: "in-progress" as QuestStatus } : q
         );
         setQuests(updatedQuests);
       }
@@ -430,21 +622,39 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const startQuest = async (questId: string): Promise<boolean> => {
-    if (!user) return false;
+  const startQuest = async (questId: string): Promise<{ success: boolean; action: 'map' | 'quiz' | 'none' }> => {
+    if (!user) return { success: false, action: 'none' };
 
     // Don't allow starting completed quests
     if (userProgress.completedQuests.includes(questId)) {
       console.log("Cannot start quest - already completed:", questId);
-      return false;
+      return { success: false, action: 'none' };
     }
 
     if (!canStartQuest(questId)) {
-      return false;
+      return { success: false, action: 'none' };
     }
 
+    const quest = quests.find(q => q.id === questId);
+    
+    // 🚨 NEW: For quests with quizzes, check if location is completed first
+    if (quest?.hasQuiz && quest.questions && quest.questions.length > 0) {
+      const locationCompleted = userProgress.inProgressQuests[questId]?.locationCompleted;
+      
+      if (!locationCompleted) {
+        // Location not completed - set as active quest for map
+        await setActiveQuest(questId);
+        return { success: true, action: 'map' };
+      } else {
+        // Location completed - start the quiz
+        startQuiz(questId);
+        return { success: true, action: 'quiz' };
+      }
+    }
+
+    // For regular location quests without quizzes
     await setActiveQuest(questId);
-    return true;
+    return { success: true, action: 'map' };
   };
 
   const completeQuest = async (questId: string) => {
@@ -460,7 +670,7 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const { [questId]: _, ...remainingInProgress } = userProgress.inProgressQuests;
       
       // Calculate new total points
-      const questPoints = quest.points || 0;
+      const questPoints = quest.rewardPoints || quest.points || 0;
       const newTotalPoints = (userProgress.totalPoints || 0) + questPoints;
 
       const updatedProgress: AppUserProgress = {
@@ -475,7 +685,8 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             completedAt: new Date(),
             title: quest.title
           }
-        }
+        },
+        quizProgress: userProgress.quizProgress
       };
 
       // Award collectible based on quest difficulty
@@ -535,11 +746,14 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setActiveQuestState(null);
       }
 
-      // Update local quests state
-      const updatedQuests = quests.map(q => 
-        q.id === questId ? { ...q, status: "Completed" as const } : q
+      // 🚨 FIX: Update local quests state to mark this quest as completed
+      setQuests(prevQuests => 
+        prevQuests.map(q => 
+          q.id === questId 
+            ? { ...q, status: "completed" as QuestStatus }
+            : q
+        )
       );
-      setQuests(updatedQuests);
 
       console.log(`✅ Completed quest: ${quest.title} - +${questPoints} points (Total: ${newTotalPoints})`);
 
@@ -550,7 +764,7 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const completeLocationQuest = (questId: string, userPosition: { lat: number; lng: number }): boolean => {
     const quest = quests.find(q => q.id === questId);
-    if (!quest || quest.type !== "Location") return false;
+    if (!quest) return false;
 
     // Don't complete already completed quests
     if (userProgress.completedQuests.includes(questId)) {
@@ -565,23 +779,44 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const isAtLocation = distance <= COMPLETION_RADIUS;
     
     if (isAtLocation) {
-      completeQuest(questId);
+      // 🚨 FIX: Check if this quest has a quiz
+      const hasQuiz = quest.questions && quest.questions.length > 0;
+      
+      if (!hasQuiz) {
+        // Quest has no quiz - complete it immediately
+        completeQuest(questId);
+        return true;
+      }
+      
+      // 🚨 FIX: Quest has quiz - only mark location as completed
+      setUserProgress(prev => ({
+        ...prev,
+        inProgressQuests: {
+          ...prev.inProgressQuests,
+          [questId]: {
+            ...prev.inProgressQuests[questId],
+            locationCompleted: true,
+            startedAt: prev.inProgressQuests[questId]?.startedAt || new Date()
+          }
+        }
+      }));
+
+      console.log(`📍 Location requirement completed for: ${quest.title}. Quiz is now available.`);
       return true;
     }
 
     return false;
   };
-
   const submitQuizAnswers = async (questId: string, answers: number[]): Promise<boolean> => {
     const quest = quests.find(q => q.id === questId);
-    if (!quest || !quest.quizQuestions) return false;
+    if (!quest || !quest.questions) return false;
 
     // Don't submit answers for completed quests
     if (userProgress.completedQuests.includes(questId)) {
       return false;
     }
 
-    const allCorrect = quest.quizQuestions.every((question, index) => 
+    const allCorrect = quest.questions.every((question, index) => 
       answers[index] === question.correctAnswer
     );
 
@@ -626,7 +861,15 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       canStartQuest,
       checkAbandonment,
       updateLastActivity,
-      calculateTotalPoints
+      calculateTotalPoints,
+      // Quiz methods
+      startQuiz,
+      submitQuizAnswer,
+      completeQuiz,
+      resetQuiz,
+      getQuizResults,
+      activeQuiz,
+      quizProgress: userProgress.quizProgress
     }}>
       {children}
     </QuestContext.Provider>

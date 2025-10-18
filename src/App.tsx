@@ -19,6 +19,7 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import QuestDetail from "./pages/QuestDetail";
+import QuizDetail from "./pages/QuizDetail"; // 🚨 ADD THIS IMPORT
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminProtectedRoute from "@/components/AdminProtectedRoute";
 import { useAbandonmentNotification } from '@/hooks/useAbandonmentNotification';
@@ -77,12 +78,24 @@ function AppContent() {
             </DarkModeWrapper>
           } 
         />
+        {/* 🚨 UPDATED: Fixed route path for QuestDetail */}
         <Route 
           path="/quest/:questId"
           element={
             <DarkModeWrapper>
               <ProtectedRoute>
                 <QuestDetail />
+              </ProtectedRoute>
+            </DarkModeWrapper>
+          } 
+        />
+        {/* 🚨 NEW: Add QuizDetail route */}
+        <Route 
+          path="/quests/:questId" 
+          element={
+            <DarkModeWrapper>
+              <ProtectedRoute>
+                <QuizDetail />
               </ProtectedRoute>
             </DarkModeWrapper>
           } 

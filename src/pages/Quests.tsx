@@ -3,11 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Star, Clock, Award, Play, CheckCircle, Timer } from "lucide-react";
+import { MapPin, Star, Clock, Award, Play, CheckCircle, Timer, HelpCircle } from "lucide-react";
 import Header from "@/components/Header";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuest } from "@/contexts/QuestContext";
+import { Quest } from "@/types/quest";
 
 const Quests = () => {
   const [selectedTab, setSelectedTab] = useState("all");
@@ -22,9 +23,9 @@ const Quests = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
 
-  const handleStartQuest = async (quest: any) => {
+  const handleStartQuest = async (quest: Quest) => {
     // 🚨 FIXED: Don't allow starting completed quests
-    if (quest.status === "Completed") {
+    if (quest.status === "Completed" || quest.status === "completed") {
       console.log("Quest already completed:", quest.title);
       return;
     }
@@ -59,10 +60,23 @@ const Quests = () => {
       if (!confirmSwitch) return;
     }
 
-    const success = await startQuest(quest.id);
-    if (success) {
-      // Navigate to MAP page to show the path and directions
-      navigate('/map', { state: { autoSelectQuest: quest.id } });
+    // 🚨 UPDATED: Handle the new quest flow with location-first requirement
+    const result = await startQuest(quest.id);
+    
+    if (result.success) {
+      switch (result.action) {
+        case 'map':
+          // Navigate to MAP page for location-based quests
+          navigate('/map', { state: { autoSelectQuest: quest.id } });
+          break;
+        case 'quiz':
+          // Navigate to quiz page for quests that have location completed
+          navigate(`/quests/${quest.id}`);
+          break;
+        case 'none':
+          // No action needed (shouldn't happen with success: true)
+          break;
+      }
     } else {
       alert("Failed to start quest. Please try again.");
     }
@@ -79,9 +93,15 @@ const Quests = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "Available": return Play;
-      case "In Progress": return Timer;
-      case "Completed": return CheckCircle;
+      case "Available": 
+      case "available": 
+        return Play;
+      case "In Progress": 
+      case "in-progress": 
+        return Timer;
+      case "Completed": 
+      case "completed": 
+        return CheckCircle;
       default: return Play;
     }
   };
@@ -91,17 +111,63 @@ const Quests = () => {
       case "Location": return MapPin;
       case "Treasure": return Star;
       case "Challenge": return Award;
+      case "Quiz": return HelpCircle;
+      case "Timed": return Clock;
+      case "Multiplayer": return Award;
       default: return MapPin;
     }
   };
 
+  // 🚨 UPDATED: Filter quests with status compatibility
   const filteredQuests = quests.filter((quest) => {
     if (selectedTab === "all") return true;
-    if (selectedTab === "available") return quest.status === "Available";
-    if (selectedTab === "in-progress") return quest.status === "In Progress";
-    if (selectedTab === "completed") return quest.status === "Completed";
+    if (selectedTab === "available") return quest.status === "Available" || quest.status === "active";
+    if (selectedTab === "in-progress") return quest.status === "In Progress" || quest.status === "in-progress";
+    if (selectedTab === "completed") return quest.status === "Completed" || quest.status === "completed";
     return true;
   });
+
+  // 🚨 NEW: Helper to get display status text
+  const getDisplayStatus = (status: string): string => {
+    switch (status) {
+      case "active": return "Available";
+      case "in-progress": return "In Progress";
+      case "completed": return "Completed";
+      default: return status;
+    }
+  };
+
+  // 🚨 NEW: Helper to get button text based on quest type and status
+// 🚨 UPDATED: Helper to get button text based on quest type and progress
+  const getButtonText = (quest: Quest, hasUnmetRequirements: boolean) => {
+    if (quest.status === "Completed" || quest.status === "completed") {
+      return "Completed";
+    }
+    
+    if (hasUnmetRequirements) {
+      return "Requirements Needed";
+    }
+
+    // 🚨 NEW: Handle quests with location-first requirement
+    if (quest.hasQuiz && quest.questions && quest.questions.length > 0) {
+      const locationCompleted = userProgress.inProgressQuests[quest.id]?.locationCompleted;
+      
+      if (!locationCompleted) {
+        return "Go to Location";
+      } else if (quest.status === "In Progress" || quest.status === "in-progress") {
+        return "Take Quiz";
+      } else {
+        return "Start Quiz";
+      }
+    }
+
+    // Regular location quests
+    if (quest.status === "In Progress" || quest.status === "in-progress") {
+      return "Continue Quest";
+    }
+
+    return "Start Quest";
+  };
 
   if (loading) {
     return (
@@ -161,13 +227,13 @@ const Quests = () => {
               All Quests ({quests.length})
             </TabsTrigger>
             <TabsTrigger value="available" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
-              Available ({quests.filter(q => q.status === "Available").length})
+              Available ({quests.filter(q => q.status === "Available" || q.status === "active").length})
             </TabsTrigger>
             <TabsTrigger value="in-progress" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
-              In Progress ({quests.filter(q => q.status === "In Progress").length})
+              In Progress ({quests.filter(q => q.status === "In Progress" || q.status === "in-progress").length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="data-[state=active]:bg-background dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
-              Completed ({quests.filter(q => q.status === "Completed").length})
+              Completed ({quests.filter(q => q.status === "Completed" || q.status === "completed").length})
             </TabsTrigger>
           </TabsList>
 
@@ -190,16 +256,20 @@ const Quests = () => {
                 {filteredQuests.map((quest) => {
                   const StatusIcon = getStatusIcon(quest.status);
                   const TypeIcon = getTypeIcon(quest.type);
+                  const displayStatus = getDisplayStatus(quest.status);
 
                   // Check if quest has requirements that aren't met
                   const hasUnmetRequirements = quest.requiredQuests && 
                     quest.requiredQuests.some(reqId => !userProgress.completedQuests.includes(reqId));
 
+                  const isCompleted = quest.status === "Completed" || quest.status === "completed";
+                  const buttonText = getButtonText(quest, hasUnmetRequirements);
+
                   return (
                     <Card
                       key={quest.id}
                       className={`group hover:shadow-quest transition-all duration-300 transform hover:scale-[1.02] bg-card dark:bg-gray-800 dark:border-gray-700 ${
-                        (hasUnmetRequirements || quest.status === "Completed") ? "opacity-60" : ""
+                        (hasUnmetRequirements || isCompleted) ? "opacity-60" : ""
                       }`}
                     >
                       <CardHeader className="pb-4">
@@ -212,12 +282,31 @@ const Quests = () => {
                               {quest.type}
                             </Badge>
                           </div>
-                          <Badge className={getDifficultyColor(quest.difficulty)}>
-                            {quest.difficulty}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge className={getDifficultyColor(quest.difficulty)}>
+                              {quest.difficulty}
+                            </Badge>
+                            {/* 🚨 NEW: Quiz question count badge */}
+                            {quest.type === "Quiz" && quest.questions && quest.questions.length > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                {quest.questions.length} Qs
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <CardTitle className="text-lg font-semibold dark:text-white">{quest.title}</CardTitle>
                         <CardDescription className="text-sm dark:text-gray-300">{quest.description}</CardDescription>
+                        
+                        {/* 🚨 NEW: Quiz-specific info */}
+                        {quest.type === "Quiz" && (
+                          <div className="mt-2 flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400">
+                            <HelpCircle className="w-4 h-4" />
+                            <span>Passing: {quest.passingScore || 70}%</span>
+                            {quest.allowRetries && (
+                              <span className="text-xs">• Retries allowed</span>
+                            )}
+                          </div>
+                        )}
                         
                         {/* Requirements Warning */}
                         {hasUnmetRequirements && (
@@ -241,7 +330,8 @@ const Quests = () => {
                           </div>
                           <div className="flex items-center space-x-2 text-warning dark:text-yellow-400">
                             <Star className="w-4 h-4" />
-                            <span className="font-medium">{quest.points} points</span>
+                            {/* 🚨 UPDATED: Use rewardPoints with points fallback */}
+                            <span className="font-medium">{quest.rewardPoints || quest.points || 0} points</span>
                           </div>
                         </div>
 
@@ -259,30 +349,20 @@ const Quests = () => {
                         )}
 
                         <div className="pt-2">
-                          {/* 🚨 FIXED: Simplified button logic to avoid TypeScript errors */}
-                          {quest.status === "Completed" ? (
+                          {isCompleted ? (
                             <Button variant="success" className="w-full" disabled>
                               <CheckCircle className="w-4 h-4 mr-2" />
                               Completed
                             </Button>
                           ) : (
                             <Button
-                              variant={quest.status === "Available" ? "default" : "secondary"}
+                              variant={displayStatus === "Available" ? "default" : "secondary"}
                               className="w-full"
                               onClick={() => handleStartQuest(quest)}
                               disabled={hasUnmetRequirements}
                             >
-                              {quest.status === "Available" ? (
-                                <>
-                                  <Play className="w-4 h-4 mr-2" />
-                                  {hasUnmetRequirements ? "Requirements Needed" : "Start Quest"}
-                                </>
-                              ) : (
-                                <>
-                                  <Timer className="w-4 h-4 mr-2" />
-                                  Continue Quest
-                                </>
-                              )}
+                              <StatusIcon className="w-4 h-4 mr-2" />
+                              {buttonText}
                             </Button>
                           )}
                         </div>
@@ -303,19 +383,29 @@ const Quests = () => {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-2xl font-bold text-primary dark:text-blue-400">{quests.filter(q => q.status === "Completed").length}</div>
+                <div className="text-2xl font-bold text-primary dark:text-blue-400">
+                  {quests.filter(q => q.status === "Completed" || q.status === "completed").length}
+                </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-400">Completed</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-secondary dark:text-purple-400">{quests.filter(q => q.status === "In Progress").length}</div>
+                <div className="text-2xl font-bold text-secondary dark:text-purple-400">
+                  {quests.filter(q => q.status === "In Progress" || q.status === "in-progress").length}
+                </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-400">In Progress</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-warning dark:text-yellow-400">{quests.filter(q => q.status === "Available").length}</div>
+                <div className="text-2xl font-bold text-warning dark:text-yellow-400">
+                  {quests.filter(q => q.status === "Available" || q.status === "active").length}
+                </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-400">Available</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-success dark:text-green-400">{quests.reduce((sum, q) => q.status === "Completed" ? sum + q.points : sum, 0)}</div>
+                <div className="text-2xl font-bold text-success dark:text-green-400">
+                  {quests.reduce((sum, q) => 
+                    (q.status === "Completed" || q.status === "completed") ? sum + (q.rewardPoints || q.points || 0) : sum, 0
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-400">Total Points</div>
               </div>
             </div>
