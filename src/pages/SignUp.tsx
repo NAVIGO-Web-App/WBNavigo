@@ -225,7 +225,7 @@ export default function SignUpPage() {
                 <form id="registerForm" onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
                     <Input type="text" id="regName" name="regName" placeholder="Your name" className="w-full" required disabled={isLoading} />
-                    <Input type="email" id="regEmail" name="regEmail" placeholder="Email address" className="w-full" required disabled={isLoading} />
+                    <Input type="email" id="regEmail" name="regEmail" placeholder="Email" className="w-full" required disabled={isLoading} />
                     <Input type="password" id="regPassword" name="regPassword" placeholder="Create password" className="w-full" required disabled={isLoading} />
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>

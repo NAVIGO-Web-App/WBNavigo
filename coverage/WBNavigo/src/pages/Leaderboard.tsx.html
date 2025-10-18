@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/119</span>
+                <span class='fraction'>0/128</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/119</span>
+                <span class='fraction'>0/128</span>
             </div>
         
             
@@ -244,7 +244,16 @@
 <a name='L179'></a><a href='#L179'>179</a>
 <a name='L180'></a><a href='#L180'>180</a>
 <a name='L181'></a><a href='#L181'>181</a>
-<a name='L182'></a><a href='#L182'>182</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -278,11 +287,20 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -440,7 +458,7 @@ interface LeaderboardEntry {
   name: string;
   email: string;
   points: number;
-  avatar?: string;
+  avatar?: string; // this will now be profilePictureUrl from Firestore
   questsCompleted?: number;
   badges?: number;
   trend?: "up" | "down" | "same";
@@ -451,19 +469,28 @@ interface LeaderboardEntry {
 <span class="cstat-no" title="statement not covered" >const Leaderboard = () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  const { theme } = useTheme();</span>
 <span class="cstat-no" title="statement not covered" >  const [leaderboardData, setLeaderboardData] = useState&lt;LeaderboardEntry[]&gt;([]);</span>
-<span class="cstat-no" title="statement not covered" >  const [user] = useAuthState(auth); // get the logged-in user</span>
+<span class="cstat-no" title="statement not covered" >  const [user] = useAuthState(auth);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    const fetchLeaderboard = async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
 <span class="cstat-no" title="statement not covered" >        const usersCol = collection(db, "users");</span>
 <span class="cstat-no" title="statement not covered" >        const snapshot = await getDocs(usersCol);</span>
-<span class="cstat-no" title="statement not covered" >        const users = snapshot.docs.map(doc =&gt; doc.data() as LeaderboardEntry);</span>
+<span class="cstat-no" title="statement not covered" >        const users = snapshot.docs.map(doc =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >          const data = doc.data();</span>
+<span class="cstat-no" title="statement not covered" >          return {</span>
+<span class="cstat-no" title="statement not covered" >            name: data.name,</span>
+<span class="cstat-no" title="statement not covered" >            email: data.email,</span>
+<span class="cstat-no" title="statement not covered" >            points: data.points || 0,</span>
+<span class="cstat-no" title="statement not covered" >            avatar: data.profilePictureUrl, // &lt;-- use profile picture here</span>
+<span class="cstat-no" title="statement not covered" >            questsCompleted: data.questsCompleted,</span>
+<span class="cstat-no" title="statement not covered" >            badges: data.badges,</span>
+<span class="cstat-no" title="statement not covered" >            trend: data.trend,</span>
+<span class="cstat-no" title="statement not covered" >          } as LeaderboardEntry;</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        // Sort by points descending</span>
 <span class="cstat-no" title="statement not covered" >        const sorted = users.sort((a, b) =&gt; b.points - a.points);</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        // Assign ranks and check current user</span>
 <span class="cstat-no" title="statement not covered" >        const ranked = sorted.map((entry, index) =&gt; ({</span>
 <span class="cstat-no" title="statement not covered" >          ...entry,</span>
 <span class="cstat-no" title="statement not covered" >          rank: index + 1,</span>
@@ -472,7 +499,7 @@ interface LeaderboardEntry {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        setLeaderboardData(ranked);</span>
 <span class="cstat-no" title="statement not covered" >      } catch (err) {</span>
-<span class="cstat-no" title="statement not covered" >        console.error("Error fetching users:", err);</span>
+<span class="cstat-no" title="statement not covered" >        console.error("Error fetching leaderboard:", err);</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
@@ -613,7 +640,7 @@ interface LeaderboardEntry {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-17T17:11:56.566Z
+                at 2025-10-18T19:15:56.215Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
