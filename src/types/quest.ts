@@ -22,6 +22,7 @@ export interface QuizProgress {
   completed: boolean;
   startedAt: Date;
   timeSpent: number; // in seconds
+  retryCount?: number; // 🚨 NEW: Track retry attempts
 }
 
 export interface QuizResults {

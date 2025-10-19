@@ -9,9 +9,13 @@ import { useTheme } from "@/contexts/ThemeContext";
 import Header from "@/components/Header";
 import { useQuest } from "@/contexts/QuestContext";
 import ActiveQuestPanel from "@/components/ActiveQuestPanel";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import { Quest } from "@/types/quest";
+import UserGuideAlert from "@/components/UserGuideAlert";
+import { ToastProvider } from "@/components/ui/toast";
+import { Toaster } from "@/components/ui/sonner";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigoTutorial } from "@/hooks/useNavigoTutorial";
+import HelpButton from "@/components/HelpButton";
 
 // Define proper interfaces
 interface Position {
@@ -44,6 +48,52 @@ const CampusMap = () => {
   const { theme } = useTheme();
   const mapRef = useRef<google.maps.Map | null>(null);
   const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
+  
+  // 🚨 NEW: Track recently completed quests to prevent repeated alerts
+  const [recentlyCompletedQuests, setRecentlyCompletedQuests] = useState<Set<string>>(new Set());
+  const [showGuide, setShowGuide] = useState<{
+    welcome: boolean;
+    location: boolean;
+    quiz: boolean;
+  }>({
+    welcome: true,
+    location: false,
+    quiz: false
+  });
+
+  const { toast } = useToast();
+  const { 
+    startTutorial, 
+    tutorialActive,
+  } = useNavigoTutorial(userPosition, selectedQuest);
+
+  // Enhanced guide handling with force display
+  const handleShowGuides = () => {
+    // Force display all guides
+    setShowGuide({
+      welcome: true,
+      location: true,
+      quiz: true
+    });
+    
+    // Reset any selected quest to show general guides
+    if (!selectedQuest) {
+      handleQuestClick(quests[0]); // Select first quest if none selected
+    }
+    
+    // Ensure guides are visible
+    toast({
+      title: "Navigation Guides �️",
+      description: "Here's how to use NAVIGO! Check out the guides above the map.",
+      duration: 5000,
+    });
+    
+    // Force map to recenter if we have a selected quest
+    if (selectedQuest && mapRef.current) {
+      mapRef.current.panTo(selectedQuest.position);
+      mapRef.current.setZoom(17);
+    }
+  };
   
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
@@ -233,61 +283,89 @@ const CampusMap = () => {
     }
   }, [selectedQuest, userPosition, lastDirectionPosition, isSignificantMovement, calculateDirections, positionUpdateCount, isLoaded]);
 
-  // Handle quest completion with quiz support
-  // Handle quest completion with quiz support
+  // 🚨 FIXED: Handle quest completion with proper tracking to prevent repeated alerts
   useEffect(() => {
     if (!userPosition || !activeQuest) return;
 
     const activeQuestData = quests.find(q => q.id === activeQuest.questId);
     if (!activeQuestData) return;
 
-    // Complete all quest types when user reaches location (including quiz quests)
-    if (activeQuestData.type === "Location" || activeQuestData.type === "Quiz") {
-      if (userProgress.completedQuests.includes(activeQuest.questId)) return;
-
-      const isAtLocation = completeLocationQuest(activeQuest.questId, userPosition);
-
-      if (isAtLocation) {
-        alert(`🎉 Quest Completed! You've reached ${activeQuestData.title}`);
-
-        // Arrow function expression (safe inside block)
-        const rewardCollectible = async (userId: string, questId: string, collectible: any) => {
-          const collectibleRef = doc(db, "users", userId, "collectibles", collectible.id);
-          await setDoc(collectibleRef, {
-            ...collectible,
-            obtainedAt: new Date(),
-          });
-        };
-
-        refreshQuests();
-      }
+    // 🚨 FIX: Skip if recently completed to prevent repeated alerts
+    if (recentlyCompletedQuests.has(activeQuest.questId)) {
+      return;
     }
-  }, [userPosition, activeQuest, quests, completeLocationQuest, refreshQuests, userProgress.completedQuests]);
 
+    // 🚨 FIX: Skip if quest is already completed in userProgress
+    if (userProgress.completedQuests.includes(activeQuest.questId)) {
+      return;
+    }
 
-  // Debug function for location detection
-  const checkLocationDebug = useCallback(() => {
-    if (userPosition && activeQuest) {
-      const activeQuestData = quests.find(q => q.id === activeQuest.questId);
-      if (activeQuestData && activeQuestData.type === "Location") {
-        const distance = calculateDistance(
-          userPosition.lat, userPosition.lng,
-          activeQuestData.position.lat, activeQuestData.position.lng
-        );
+    // Complete ALL quest types when user reaches location (including quiz quests)
+    if (activeQuestData.type === "Location" || activeQuestData.type === "Quiz") {
+      const isAtLocation = completeLocationQuest(activeQuest.questId, userPosition);
+      
+      if (isAtLocation) {
+        console.log(`🎉 Success! Reached quest location: ${activeQuestData.title}`);
+        
+        // 🚨 FIX: Mark as recently completed to prevent repeated alerts
+        setRecentlyCompletedQuests(prev => new Set(prev).add(activeQuest.questId));
         
         // Special handling for quiz quests
         if (activeQuestData.type === "Quiz") {
-          alert(`🎉 Location Reached! Now you can take the quiz for "${activeQuestData.title}"`);
-          // Auto-navigate to quiz after reaching location
-          navigate(`/quests/${activeQuestData.id}`);
+          // 🚨 FIX: Only show alert if location was just completed (not already completed)
+          const locationAlreadyCompleted = userProgress.inProgressQuests[activeQuest.questId]?.locationCompleted;
+          if (!locationAlreadyCompleted) {
+            const message = document.createElement('div');
+            message.innerHTML = `
+              <div style="text-align: center;">
+                <h3 style="font-size: 1.2em; margin-bottom: 10px;">🎉 Quiz Location Reached!</h3>
+                <p style="margin-bottom: 15px;">You've arrived at "${activeQuestData.title}"</p>
+                <p style="color: #6366f1;">Ready to take the quiz and earn ${activeQuestData.rewardPoints || activeQuestData.points || 0} points?</p>
+              </div>
+            `;
+            
+            if (window.confirm(message.innerText)) {
+              navigate(`/quests/${activeQuestData.id}`);
+            }
+          }
         } else {
-          alert(`🎉 Quest Completed! You've reached ${activeQuestData.title}`);
+          // 🚨 FIX: For location quests, only show alert if not already completed
+          if (!userProgress.completedQuests.includes(activeQuest.questId)) {
+            const message = document.createElement('div');
+            message.innerHTML = `
+              <div style="text-align: center;">
+                <h3 style="font-size: 1.2em; margin-bottom: 10px;">🎉 Quest Complete!</h3>
+                <p style="margin-bottom: 10px;">You've successfully reached ${activeQuestData.title}</p>
+                <p style="color: #10b981;">+${activeQuestData.rewardPoints || activeQuestData.points || 0} points earned!</p>
+              </div>
+            `;
+            alert(message.innerText);
+          }
         }
         
         refreshQuests();
+
+        // 🚨 FIX: Remove from recently completed after a delay to allow future completions
+        setTimeout(() => {
+          setRecentlyCompletedQuests(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(activeQuest.questId);
+            return newSet;
+          });
+        }, 5000); // 5 second cooldown
       }
     }
-  }, [userPosition, activeQuest, quests, completeLocationQuest, refreshQuests, userProgress.completedQuests, navigate]);
+  }, [
+    userPosition, 
+    activeQuest, 
+    quests, 
+    completeLocationQuest, 
+    refreshQuests, 
+    userProgress.completedQuests, 
+    userProgress.inProgressQuests, 
+    navigate, 
+    recentlyCompletedQuests
+  ]);
 
   // Start quest function with quiz handling
   const handleStartQuest = useCallback(async (quest: Quest) => {
@@ -346,6 +424,13 @@ const CampusMap = () => {
     setSelectedQuest(quest);
     updateLastActivity();
     setDirectionsError(null);
+    
+    // Show appropriate guide based on quest type
+    if (quest.type === "Quiz") {
+      setShowGuide(prev => ({ ...prev, quiz: true }));
+    } else if (quest.type === "Location") {
+      setShowGuide(prev => ({ ...prev, location: true }));
+    }
   }, [updateLastActivity]);
 
   const getDifficultyColor = useCallback((difficulty: string) => {
@@ -402,9 +487,43 @@ const CampusMap = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
-      <Header />
-      <div className="container mx-auto px-4 py-8">
+    <ToastProvider>
+      <div className="min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-white transition-colors duration-200">
+        <Header />
+        <HelpButton 
+          onStartTutorial={startTutorial}
+          onShowGuides={handleShowGuides}
+        />
+        <Toaster />
+        <div className="container mx-auto px-4 py-8">
+        {/* User Guides */}
+        {showGuide.welcome && (
+          <UserGuideAlert
+            type="welcome"
+            title="Welcome to NAVIGO! 🎉"
+            description="Explore our interactive campus map! Click on markers to view quests, follow directions to locations, and complete challenges to earn points. Select any marker to get started!"
+            onDismiss={() => setShowGuide(prev => ({ ...prev, welcome: false }))}
+          />
+        )}
+        
+        {selectedQuest?.type === "Quiz" && showGuide.quiz && (
+          <UserGuideAlert
+            type="quiz"
+            title={`Quiz Quest: ${selectedQuest.title}`}
+            description="This is a Quiz Quest! First, navigate to the marked location. Once you arrive, the quiz will automatically unlock. Answer the questions correctly to earn points!"
+            onDismiss={() => setShowGuide(prev => ({ ...prev, quiz: false }))}
+          />
+        )}
+        
+        {selectedQuest?.type === "Location" && showGuide.location && (
+          <UserGuideAlert
+            type="location"
+            title="Location Quest Selected"
+            description="Follow the navigation directions to reach this location. You'll automatically complete the quest when you arrive at the marked spot!"
+            onDismiss={() => setShowGuide(prev => ({ ...prev, location: false }))}
+          />
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Map */}
           <div className="lg:col-span-2">
@@ -553,31 +672,31 @@ const CampusMap = () => {
                       <span>{selectedQuest.location}</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Star className="w-4 h-4 text-yellow-500" />
-                      <span>{selectedQuest.rewardPoints || selectedQuest.points || 0} points</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
                       <Clock className="w-4 h-4 text-muted-foreground" />
-                      <span>Estimated: {selectedQuest.estimatedTime}</span>
+                      <span>
+                        {directions?.routes[0]?.legs[0] ? (
+                          <>
+                            Walking time: {directions.routes[0].legs[0].duration?.text}
+                            {selectedQuest.type === "Quiz" && (
+                              <span> + ~10 min for quiz</span>
+                            )}
+                          </>
+                        ) : (
+                          "Calculating time..."
+                        )}
+                      </span>
                     </div>
                     
                     {/* Quiz-specific information */}
                     {selectedQuest.type === "Quiz" && (
-                      <>
-                        <div className="flex items-center space-x-2 text-purple-600 dark:text-purple-400">
-                          <HelpCircle className="w-4 h-4" />
-                          <span>{selectedQuest.questions?.length || 0} questions</span>
-                        </div>
-                        {selectedQuest.passingScore && (
-                          <div className="flex items-center space-x-2 text-purple-600 dark:text-purple-400">
-                            <span>Passing: {selectedQuest.passingScore}%</span>
-                          </div>
-                        )}
-                      </>
+                      <div className="flex items-center space-x-2 text-purple-600 dark:text-purple-400">
+                        <HelpCircle className="w-4 h-4" />
+                        <span>{selectedQuest.questions?.length || 0} questions • {selectedQuest.passingScore}% to pass • {selectedQuest.rewardPoints || selectedQuest.points || 0} points</span>
+                      </div>
                     )}
                   </div>
 
-                  {/* Directions for ALL quest types */}
+                  {/* Quest action section */}
                   <div className="pt-4 border-t border-border dark:border-gray-600">
                     <h4 className="font-medium mb-2 flex items-center space-x-2">
                       <Navigation className="w-4 h-4 text-primary" />
@@ -586,7 +705,7 @@ const CampusMap = () => {
                         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                       )}
                     </h4>
-                    
+
                     {directionsError ? (
                       <div className="text-sm space-y-2">
                         <div className="flex items-center space-x-2 text-destructive">
@@ -603,12 +722,13 @@ const CampusMap = () => {
                         </Button>
                       </div>
                     ) : directions && directions.routes[0]?.legs[0] ? (
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p>Distance: {directions.routes[0].legs[0].distance?.text}</p>
-                        <p>Time: {directions.routes[0].legs[0].duration?.text}</p>
-                        {/* Quiz quest instructions */}
-                        {selectedQuest.type === "Quiz" && (
-                          <p className="text-purple-600 dark:text-purple-400 font-medium mt-2">
+                      <div className="text-sm text-muted-foreground space-y-2">
+                        <div className="space-y-1">
+                          <p>Distance: {directions.routes[0].legs[0].distance?.text}</p>
+                          <p>Time: {directions.routes[0].legs[0].duration?.text}</p>
+                        </div>
+                        {selectedQuest.type === "Quiz" && !isQuestCompleted && (
+                          <p className="text-purple-600 dark:text-purple-400 font-medium">
                             📍 Go to this location first to unlock the quiz!
                           </p>
                         )}
@@ -620,57 +740,21 @@ const CampusMap = () => {
                     )}
                   </div>
 
-                  {/* Quest action button */}
-                  <Button 
-                    onClick={isQuestInProgress ? () => handleContinueQuest(selectedQuest) : () => handleStartQuest(selectedQuest)} 
-                    className="w-full"
-                    disabled={isQuestCompleted}
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    {isQuestCompleted ? "Completed" : 
-                     selectedQuest.type === "Quiz" ? 
-                       (isQuestInProgress ? "Continue Quiz" : "Navigate to Quiz Location") :
-                     isQuestInProgress ? "Continue Quest" : "Start Quest"}
-                  </Button>
-
-                  {/* Quiz quest explanation */}
-                  {selectedQuest.type === "Quiz" && !isQuestCompleted && (
-                    <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
-                      <p className="text-sm text-purple-800 dark:text-purple-300 text-center">
-                        🎯 <strong>How this works:</strong><br/>
-                        1. Navigate to the location shown on map<br/>
-                        2. Quiz will automatically unlock when you arrive<br/>
-                        3. Complete the quiz to earn {selectedQuest.rewardPoints || selectedQuest.points || 0} points!
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Manual test button for location completion */}
-                  {selectedQuest && selectedQuest.type === "Location" && !userProgress.completedQuests.includes(selectedQuest.id) && (
+                  {/* Action button - only show when no directions are available */}
+                  {!directions?.routes[0]?.legs[0] && (
                     <Button 
-                      onClick={() => {
-                        if (selectedQuest && userPosition) {
-                          const distance = calculateDistance(
-                            userPosition.lat, userPosition.lng,
-                            selectedQuest.position.lat, selectedQuest.position.lng
-                          );
-                          console.log(`🧪 Manual test - Distance: ${distance.toFixed(2)}m`);
-                          
-                          const completed = completeLocationQuest(selectedQuest.id, userPosition);
-                          if (completed) {
-                            console.log("✅ Manual completion successful!");
-                            refreshQuests();
-                          } else {
-                            console.log("❌ Manual completion failed - not close enough");
-                          }
-                        }
-                      }}
-                      variant="outline"
-                      className="w-full mt-2"
+                      onClick={isQuestInProgress ? () => handleContinueQuest(selectedQuest) : () => handleStartQuest(selectedQuest)} 
+                      className="w-full"
+                      disabled={isQuestCompleted}
                     >
-                      🧪 Test Location Completion
+                      <Play className="w-4 h-4 mr-2" />
+                      {isQuestCompleted ? "Completed" : 
+                       selectedQuest.type === "Quiz" ? 
+                         (isQuestInProgress ? "Continue Quiz" : "Navigate to Quiz Location") :
+                       isQuestInProgress ? "Continue Quest" : "Start Quest"}
                     </Button>
                   )}
+
                 </CardContent>
               </Card>
             ) : (
@@ -727,6 +811,7 @@ const CampusMap = () => {
         </div>
       </div>
     </div>
+    </ToastProvider>
   );
 };
 

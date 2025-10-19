@@ -2,7 +2,6 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { MapPin, Clock, Play, X } from 'lucide-react';
 import { useQuest } from '@/contexts/QuestContext';
 import { useNavigate } from 'react-router-dom';
@@ -15,13 +14,6 @@ const ActiveQuestPanel: React.FC = () => {
   
   const quest = quests.find(q => q.id === activeQuest.questId);
   if (!quest) return null;
-
-  const calculateProgress = () => {
-    if (quest.type === "Location") {
-      return userProgress.inProgressQuests[quest.id] ? 50 : 0;
-    }
-    return 0; // For quiz quests, progress is binary
-  };
 
   const handleContinueQuest = () => {
     navigate(`/quest/${quest.id}`);
@@ -70,14 +62,6 @@ const ActiveQuestPanel: React.FC = () => {
           `}>
             {quest.difficulty}
           </Badge>
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Progress</span>
-            <span>{calculateProgress()}%</span>
-          </div>
-          <Progress value={calculateProgress()} className="h-2" />
         </div>
 
         <Button onClick={handleContinueQuest} className="w-full" size="sm">

@@ -1,8 +1,8 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword } from 'firebase/auth';
 
 interface User {
   uid: string;
@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   login: (userData: User) => void;
   logout: () => void;
+  signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
   isLoading: boolean;
 }
 
@@ -111,10 +112,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const signup = async (email: string, password: string, name: string) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Create the user document
+      await setDoc(doc(db, "users", user.uid), { 
+        name, 
+        email, 
+        points: 0, 
+        inventory: [], 
+        isAdmin: false 
+      });
+
+      // Sign out the user to prevent auto-login
+      await auth.signOut();
+      
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to create account' };
+    }
+  };
+
   const value = {
     user,
     login,
     logout,
+    signup,
     isLoading,
   };
 

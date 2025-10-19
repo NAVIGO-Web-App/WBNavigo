@@ -10,7 +10,9 @@ import { Quest } from '@/types/quest';
 const QuizDetail: React.FC = () => {
   const { questId } = useParams<{ questId: string }>();
   const navigate = useNavigate();
-  const { quests } = useQuest();
+  const { quests, resetQuiz, startQuiz } = useQuest();
+  const searchParams = new URLSearchParams(window.location.search);
+  const isRetry = searchParams.get('retry') === 'true';
 
   const quest = quests.find(q => q.id === questId) as Quest | undefined;
 
@@ -40,6 +42,17 @@ const QuizDetail: React.FC = () => {
     );
   }
 
+  // Handle quiz retry
+  React.useEffect(() => {
+    if (quest && isRetry) {
+      const setupQuiz = async () => {
+        await resetQuiz(quest.id);
+        await startQuiz(quest.id);
+      };
+      setupQuiz();
+    }
+  }, [quest, isRetry, resetQuiz, startQuiz]);
+
   return (
     <div className="min-h-screen bg-background dark:bg-gray-900">
       <Header />
@@ -53,7 +66,13 @@ const QuizDetail: React.FC = () => {
           Back to Quests
         </Button>
         
-        <QuizQuest quest={quest} />
+        {isRetry ? (
+          <div className="mb-4 bg-accent p-3 rounded-lg">
+            <p className="text-accent-foreground">Starting new quiz attempt...</p>
+          </div>
+        ) : null}
+        
+        <QuizQuest key={`${quest.id}-${isRetry ? 'retry' : 'initial'}`} quest={quest} />
       </div>
     </div>
   );
