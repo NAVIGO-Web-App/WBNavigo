@@ -14,10 +14,19 @@ const QuestDetail: React.FC = () => {
   const [userPosition, setUserPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [showQuizResult, setShowQuizResult] = useState<boolean | null>(null);
+  const hasTriggeredCompletion = React.useRef(false);
+
 
   const quest = quests.find(q => q.id === questId);
   const isCompleted = userProgress.completedQuests.includes(questId || '');
   const isInProgress = questId ? userProgress.inProgressQuests[questId] : false;
+
+  useEffect(() => {
+    if (!quest && refreshQuests) {
+      refreshQuests();
+    }
+  }, [quest, refreshQuests]);
+  
 
   useEffect(() => {
     // Get user location for location-based quests
@@ -40,27 +49,40 @@ const QuestDetail: React.FC = () => {
   }, [quest?.type]);
 
   useEffect(() => {
-    if (questId && !quest) {
+    if (questId && quests.length > 0 && !quest) {
+      // Only refresh once quests are loaded but this one is missing
       refreshQuests();
     }
-  }, [questId, quest]);
+  }, [questId, quests]);
+  
 
   // Auto-complete location quests when user is close enough
   useEffect(() => {
-    if (quest?.type === "Location" && userPosition && isInProgress && !isCompleted) {
+    if (
+      quest?.type === "Location" &&
+      userPosition &&
+      isInProgress &&
+      !isCompleted &&
+      !hasTriggeredCompletion.current
+    ) {
       const isAtLocation = completeLocationQuest(questId!, userPosition);
       if (isAtLocation) {
+        hasTriggeredCompletion.current = true; // Prevent re-trigger
         handleCompleteQuest();
       }
     }
   }, [userPosition, quest?.type, isInProgress, isCompleted]);
 
   const handleStartQuest = async () => {
-    if (questId) {
+    if (!questId) return;
+    try {
       await startQuest(questId);
+      await refreshQuests();
+    } catch (error) {
+      console.error("Failed to start quest:", error);
     }
-  };
-
+  };  
+  
   const handleCompleteQuest = async () => {
     if (questId) {
       // For quiz quests, completion is handled in submitQuiz
@@ -77,17 +99,19 @@ const QuestDetail: React.FC = () => {
   };
 
   const submitQuiz = async () => {
-    if (!questId || !quest?.quizQuestions) return;
-
+    if (!questId || !quest?.quizQuestions || showQuizResult !== null) return;
+  
     const success = await submitQuizAnswers(questId, quizAnswers);
     setShowQuizResult(success);
-
+  
     if (success) {
+      // Disable further submissions
       setTimeout(() => {
         navigate('/quests');
       }, 2000);
     }
   };
+  
 
   if (!quest) {
     return (
@@ -203,7 +227,8 @@ const QuestDetail: React.FC = () => {
 
                     {quest.quizQuestions.map((question, qIndex) => (
                       <div key={question.id} className="space-y-2">
-                        <h4 className="font-medium">{qIndex + 1}. {question.question}</h4>
+                        <h4 className="font-medium">{`${qIndex + 1}. ${question.text}`}</h4>
+
                         <div className="space-y-1">
                           {question.options.map((option, oIndex) => (
                             <Button
@@ -219,6 +244,8 @@ const QuestDetail: React.FC = () => {
                       </div>
                     ))}
                     
+                    <Button onClick={handleStartQuest}>Start Quest</Button>
+
                     {!isCompleted && (
                       <Button 
                         onClick={submitQuiz} 
