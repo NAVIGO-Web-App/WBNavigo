@@ -739,8 +739,19 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       const firestoreData = convertToFirestoreData(updatedProgress);
+      // Update userProgress
       await updateDoc(doc(db, 'userProgress', user.uid), firestoreData);
       setUserProgress(updatedProgress);
+
+      // Update points in users collection
+      const usersCollection = collection(db, 'users');
+      const userSnapshot = await getDocs(usersCollection);
+      const userDoc = userSnapshot.docs.find(doc => doc.data().email === user.email);
+      if (userDoc) {
+        await updateDoc(doc(db, 'users', userDoc.id), {
+          points: newTotalPoints
+        });
+      }
 
       if (userProgress.activeQuestId === questId) {
         setActiveQuestState(null);
