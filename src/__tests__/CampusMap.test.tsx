@@ -7,6 +7,21 @@ import { useQuest } from "@/contexts/QuestContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 const mockNavigate = vi.fn();
+// src/__tests__/setupTests.ts or at the top of CampusMap.test.tsx
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});
+
 
 // 🧩 FULL Google Maps Mock Setup
 beforeAll(() => {
