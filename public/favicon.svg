@@ -1,0 +1,18 @@
+<!-- public/favicon.svg -->
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="16" cy="16" r="15" fill="#0ea5e9" stroke="#eab308" stroke-width="1"/>
+  
+  <!-- Compass Base -->
+  <circle cx="16" cy="16" r="8" fill="white"/>
+  
+  <!-- Compass Directions -->
+  <path d="M16 8L17.5 11.5H14.5L16 8Z" fill="#0ea5e9"/>
+  <path d="M16 24L14.5 20.5H17.5L16 24Z" fill="#0ea5e9"/>
+  <path d="M8 16L11.5 14.5V17.5L8 16Z" fill="#0ea5e9"/>
+  <path d="M24 16L20.5 17.5V14.5L24 16Z" fill="#0ea5e9"/>
+  
+  <!-- Graduation Cap -->
+  <path d="M11 14L16 11L21 14V17L16 20L11 17V14Z" fill="#eab308"/>
+  <path d="M9 17L23 17" stroke="#eab308" stroke-width="2"/>
+</svg>
