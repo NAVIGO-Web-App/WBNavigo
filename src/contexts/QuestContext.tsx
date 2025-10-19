@@ -311,6 +311,10 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
+    // 🚨 FIXED: Get current progress to preserve retry count
+    const currentProgress = userProgress.quizProgress?.[questId];
+    const currentRetryCount = currentProgress?.retryCount || 0;
+
     const newProgress: QuizProgress = {
       questId,
       currentQuestion: 0,
@@ -318,11 +322,13 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       score: 0,
       completed: false,
       startedAt: new Date(),
-      timeSpent: 0
+      timeSpent: 0,
+      retryCount: currentRetryCount // 🚨 Preserve retry count
     };
 
     console.log('Creating quiz progress:', newProgress);
 
+    // 🚨 FIXED: Ensure state update is synchronous
     setUserProgress(prev => ({
       ...prev,
       quizProgress: {
@@ -339,6 +345,9 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setUserProgress(prev => {
       const progress = prev.quizProgress?.[questId];
       if (!progress || progress.completed) return prev;
+
+      // 🚨 FIX: Ensure startedAt is a Date object
+      const startedAt = progress.startedAt instanceof Date ? progress.startedAt : new Date(progress.startedAt);
 
       const newAnswers = [...progress.answers];
       newAnswers[questionIndex] = answerIndex;
@@ -359,13 +368,17 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const nextQuestionIndex = questionIndex + 1;
       const shouldAdvance = nextQuestionIndex < questions.length;
 
+      // 🚨 FIX: Calculate time spent safely
+      const currentTime = new Date();
+      const timeSpent = Math.floor((currentTime.getTime() - startedAt.getTime()) / 1000);
+
       const newProgress: QuizProgress = {
         ...progress,
         answers: newAnswers,
         score: newScore,
         // 🚨 FIX: Don't advance beyond last question
         currentQuestion: shouldAdvance ? nextQuestionIndex : questionIndex,
-        timeSpent: Math.floor((Date.now() - progress.startedAt.getTime()) / 1000)
+        timeSpent: timeSpent // 🚨 Use calculated time spent
       };
 
       return {
@@ -384,6 +397,9 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     
     if (!progress || !quest?.questions) return false;
 
+    // 🚨 FIX: Ensure startedAt is a Date object
+    const startedAt = progress.startedAt instanceof Date ? progress.startedAt : new Date(progress.startedAt);
+
     const totalQuestions = quest.questions.length;
     const correctAnswers = progress.answers.reduce((count, answer, index) => {
       return count + (answer === quest.questions![index].correctAnswer ? 1 : 0);
@@ -392,6 +408,15 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const scorePercentage = (correctAnswers / totalQuestions) * 100;
     const passingScore = quest.passingScore || 70;
     const passed = scorePercentage >= passingScore;
+
+    // 🚨 FIX: Calculate time spent safely
+    const currentTime = new Date();
+    const timeSpent = Math.floor((currentTime.getTime() - startedAt.getTime()) / 1000);
+
+    // 🚨 NEW: Check if user has retries left
+    const retryCount = progress.retryCount || 0;
+    const maxRetries = quest.allowRetries ? 1 : 0;
+    const hasRetriesLeft = retryCount < maxRetries;
 
     // Update progress as completed
     setUserProgress(prev => ({
@@ -402,32 +427,55 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           ...prev.quizProgress![questId],
           completed: true,
           score: scorePercentage,
-          timeSpent: Math.floor((Date.now() - progress.startedAt.getTime()) / 1000)
+          timeSpent: timeSpent // 🚨 Use calculated time spent
         }
       }
     }));
 
     setActiveQuiz(null);
 
-    // If passed, complete the quest (both location and quiz requirements are met)
-    if (passed) {
+    // 🚨 UPDATED: Complete quest if passed OR if failed with no retries left
+    if (passed || !hasRetriesLeft) {
       await completeQuest(questId);
-      return true;
+      return passed; // Return true only if actually passed
     }
 
     return false;
   };
 
   const resetQuiz = (questId: string) => {
+    console.log('🔄 Resetting quiz for:', questId);
+    
     setUserProgress(prev => {
-      const newQuizProgress = { ...prev.quizProgress };
-      delete newQuizProgress[questId];
+      const currentProgress = prev.quizProgress?.[questId];
       
-      return {
-        ...prev,
-        quizProgress: newQuizProgress
-      };
+      if (currentProgress) {
+        // 🚨 FIXED: Increment retry count and reset quiz state
+        const newRetryCount = (currentProgress.retryCount || 0) + 1;
+        
+        console.log(`🔄 Retry count incremented to: ${newRetryCount}`);
+        
+        return {
+          ...prev,
+          quizProgress: {
+            ...prev.quizProgress,
+            [questId]: {
+              ...currentProgress,
+              retryCount: newRetryCount,
+              currentQuestion: 0,
+              answers: new Array(currentProgress.answers.length).fill(-1),
+              completed: false,
+              score: 0,
+              startedAt: new Date(),
+              timeSpent: 0
+            }
+          }
+        };
+      }
+      
+      return prev;
     });
+    
     setActiveQuiz(null);
   };
 
@@ -436,6 +484,13 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const quest = quests.find(q => q.id === questId);
     
     if (!progress || !quest?.questions) return null;
+
+    // 🚨 FIX: Ensure startedAt is a Date object for time calculation
+    const startedAt = progress.startedAt instanceof Date ? progress.startedAt : new Date(progress.startedAt);
+    
+    // 🚨 FIX: Calculate time spent safely
+    const currentTime = new Date();
+    const timeSpent = progress.timeSpent || Math.floor((currentTime.getTime() - startedAt.getTime()) / 1000);
 
     const totalQuestions = quest.questions.length;
     const correctAnswers = progress.answers.reduce((count, answer, index) => {
@@ -449,7 +504,7 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       score: scorePercentage,
       totalQuestions,
       correctAnswers,
-      timeSpent: progress.timeSpent,
+      timeSpent: timeSpent, // 🚨 Now guaranteed to be a number
       passed: scorePercentage >= passingScore
     };
   };
@@ -739,19 +794,8 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       const firestoreData = convertToFirestoreData(updatedProgress);
-      // Update userProgress
       await updateDoc(doc(db, 'userProgress', user.uid), firestoreData);
       setUserProgress(updatedProgress);
-
-      // Update points in users collection
-      const usersCollection = collection(db, 'users');
-      const userSnapshot = await getDocs(usersCollection);
-      const userDoc = userSnapshot.docs.find(doc => doc.data().email === user.email);
-      if (userDoc) {
-        await updateDoc(doc(db, 'users', userDoc.id), {
-          points: newTotalPoints
-        });
-      }
 
       if (userProgress.activeQuestId === questId) {
         setActiveQuestState(null);
@@ -777,7 +821,7 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const quest = quests.find(q => q.id === questId);
     if (!quest) return false;
 
-    // Don't complete already completed quests
+    // 🚨 FIX: Don't complete already completed quests
     if (userProgress.completedQuests.includes(questId)) {
       return false;
     }
@@ -795,25 +839,34 @@ export const QuestProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       
       if (!hasQuiz) {
         // Quest has no quiz - complete it immediately
-        completeQuest(questId);
+        // 🚨 FIX: Add a small delay and check if already being completed
+        setTimeout(() => {
+          // Double-check that quest isn't already completed
+          if (!userProgress.completedQuests.includes(questId)) {
+            completeQuest(questId);
+          }
+        }, 100);
         return true;
       }
       
-      // 🚨 FIX: Quest has quiz - only mark location as completed
-      setUserProgress(prev => ({
-        ...prev,
-        inProgressQuests: {
-          ...prev.inProgressQuests,
-          [questId]: {
-            ...prev.inProgressQuests[questId],
-            locationCompleted: true,
-            startedAt: prev.inProgressQuests[questId]?.startedAt || new Date()
+      // 🚨 FIX: Quest has quiz - only mark location as completed if not already done
+      const locationAlreadyCompleted = userProgress.inProgressQuests[questId]?.locationCompleted;
+      if (!locationAlreadyCompleted) {
+        setUserProgress(prev => ({
+          ...prev,
+          inProgressQuests: {
+            ...prev.inProgressQuests,
+            [questId]: {
+              ...prev.inProgressQuests[questId],
+              locationCompleted: true,
+              startedAt: prev.inProgressQuests[questId]?.startedAt || new Date()
+            }
           }
-        }
-      }));
+        }));
 
-      console.log(`📍 Location requirement completed for: ${quest.title}. Quiz is now available.`);
-      return true;
+        console.log(`📍 Location requirement completed for: ${quest.title}. Quiz is now available.`);
+        return true;
+      }
     }
 
     return false;

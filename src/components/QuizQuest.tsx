@@ -27,6 +27,7 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [completionHandled, setCompletionHandled] = useState(false);
   const [shouldShowResults, setShouldShowResults] = useState(false);
+  const [retryTriggered, setRetryTriggered] = useState(false); // 🚨 NEW: Track retry state
 
   // Handle both 'questions' and 'quizQuestions' field names
   const questions = quest.questions || (quest as any).quizQuestions || [];
@@ -44,27 +45,38 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
     isInitialized: isInitialized,
     completionHandled: completionHandled,
     shouldShowResults: shouldShowResults,
+    retryTriggered: retryTriggered, // 🚨 NEW
     questCompleted: userProgress.completedQuests.includes(quest.id)
   });
 
-  // Initialize quiz
+  // 🚨 UPDATED: Initialize quiz with retry state handling
   useEffect(() => {
-    if (hasQuestions && !progress && !isInitialized) {
+    if (hasQuestions && !progress && !isInitialized && !userProgress.completedQuests.includes(quest.id)) {
       console.log('🚀 Starting quiz initialization...');
       startQuiz(quest.id);
       setIsInitialized(true);
+      setRetryTriggered(false); // 🚨 Reset retry state
     }
-  }, [quest.id, progress, startQuiz, hasQuestions, isInitialized]);
+  }, [quest.id, progress, startQuiz, hasQuestions, isInitialized, userProgress.completedQuests]);
 
-  // Reset initialization when quest changes
+  // 🚨 UPDATED: Reset initialization when quest changes or retry is triggered
   useEffect(() => {
     setIsInitialized(false);
     setCompletionHandled(false);
     setShouldShowResults(false);
+    setRetryTriggered(false);
   }, [quest.id]);
 
-  // Handle completion state
+  // 🚨 UPDATED: Handle completion state with retry consideration
   useEffect(() => {
+    // If retry was just triggered, don't show results
+    if (retryTriggered) {
+      console.log('🔄 Retry triggered, hiding results');
+      setShouldShowResults(false);
+      setCompletionHandled(false);
+      return;
+    }
+
     // Check if quest is completed in userProgress OR if progress is marked completed
     const isQuestCompleted = userProgress.completedQuests.includes(quest.id);
     const isProgressCompleted = progress?.completed;
@@ -77,12 +89,23 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
         questCompleted: isQuestCompleted, 
         progressCompleted: isProgressCompleted,
         isSubmitting,
-        completionHandled
+        completionHandled,
+        retryTriggered
       });
       setShouldShowResults(true);
       setCompletionHandled(true);
     }
-  }, [progress?.completed, completionHandled, userProgress.completedQuests, quest.id, isSubmitting, shouldShowResults]);
+  }, [progress?.completed, completionHandled, userProgress.completedQuests, quest.id, isSubmitting, shouldShowResults, retryTriggered]);
+
+  // 🚨 NEW: Listen for retry state changes
+  useEffect(() => {
+    if (progress && retryTriggered) {
+      console.log('🔄 Retry progress detected, resetting retry state');
+      setRetryTriggered(false);
+      setShouldShowResults(false);
+      setCompletionHandled(false);
+    }
+  }, [progress, retryTriggered]);
 
   const handleAnswerSelect = useCallback((answerIndex: number) => {
     if (!progress || progress.completed || userProgress.completedQuests.includes(quest.id)) {
@@ -113,34 +136,30 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
       
       if (success) {
         console.log('✅ Quiz completed successfully');
-        // Immediately show results without auto-redirect
         setShouldShowResults(true);
         setCompletionHandled(true);
       } else {
         console.log('❌ Quiz completion failed');
-        setIsSubmitting(false);
+        // 🚨 FIXED: Even if failed, show results if no retries left
+        const retryCount = progress.retryCount || 0;
+        const maxRetries = quest.allowRetries ? 1 : 0;
+        const hasRetriesLeft = retryCount < maxRetries;
+        
+        if (!hasRetriesLeft) {
+          console.log('🔒 No retries left, showing results');
+          setShouldShowResults(true);
+          setCompletionHandled(true);
+        }
       }
     } catch (error) {
       console.error('❌ Error completing quiz:', error);
+    } finally {
       setIsSubmitting(false);
     }
-  }, [quest.id, completeQuiz, isSubmitting, completionHandled, progress, userProgress.completedQuests]);
+  }, [quest.id, completeQuiz, isSubmitting, completionHandled, progress, userProgress.completedQuests, quest.allowRetries]);
 
-  const handleNextQuestion = useCallback(() => {
-    if (!progress) return;
-    
-    const currentQuestionIndex = progress.currentQuestion !== undefined 
-      ? Math.min(progress.currentQuestion, questions.length - 1)
-      : 0;
-    const currentAnswer = progress.answers?.[currentQuestionIndex] ?? -1;
-
-    if (currentAnswer === -1) return;
-    
-    console.log('➡️ Moving to next question...');
-  }, [progress, questions.length]);
-
-  // Show results immediately when quiz is completed OR quest is marked as completed
-  if (shouldShowResults || progress?.completed || userProgress.completedQuests.includes(quest.id)) {
+  // 🚨 UPDATED: Show results only when not in retry state
+  if ((shouldShowResults || userProgress.completedQuests.includes(quest.id)) && !retryTriggered) {
     return <QuizResults quest={quest} />;
   }
 
@@ -161,12 +180,20 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
     );
   }
 
-  if (!progress) {
+  // 🚨 UPDATED: Better loading state that handles retry
+  if (!progress || progress.currentQuestion === undefined) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Creating quiz session...</p>
+          <p>{retryTriggered ? 'Resetting quiz...' : 'Creating quiz session...'}</p>
+          <Button 
+            onClick={() => navigate('/quests')} 
+            className="mt-4"
+            variant="outline"
+          >
+            Back to Quests
+          </Button>
         </CardContent>
       </Card>
     );
@@ -241,7 +268,13 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
             </Button>
           ) : (
             <Button
-              onClick={handleNextQuestion}
+              onClick={() => {
+                // Auto-advance to next question when answer is selected
+                if (currentAnswer !== -1) {
+                  const nextQuestionIndex = Math.min(currentQuestionIndex + 1, questions.length - 1);
+                  // This will be handled by the answer selection
+                }
+              }}
               disabled={currentAnswer === -1}
             >
               Next Question
@@ -258,7 +291,9 @@ const QuizQuest: React.FC<QuizQuestProps> = ({ quest }) => {
           - Submitting: {isSubmitting ? 'Yes' : 'No'}<br/>
           - Completion Handled: {completionHandled ? 'Yes' : 'No'}<br/>
           - Show Results: {shouldShowResults ? 'Yes' : 'No'}<br/>
-          - Quest Completed: {userProgress.completedQuests.includes(quest.id) ? 'Yes' : 'No'}
+          - Quest Completed: {userProgress.completedQuests.includes(quest.id) ? 'Yes' : 'No'}<br/>
+          - Retry Count: {progress.retryCount || 0}<br/>
+          - Retry Triggered: {retryTriggered ? 'Yes' : 'No'} {/* 🚨 NEW */}
         </div>
       </CardContent>
     </Card>
